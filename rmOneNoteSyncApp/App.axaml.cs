@@ -14,7 +14,7 @@ public partial class App : Application
     /// <summary>
     /// Gets the current App instance
     /// </summary>
-    public static App Current => (App)Application.Current!;
+    public static new App Current => (App)Application.Current!;
     
     /// <summary>
     /// Gets or sets the service provider for dependency injection

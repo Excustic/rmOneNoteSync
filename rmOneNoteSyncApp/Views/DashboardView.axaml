@@ -51,7 +51,7 @@
                     <StackPanel Grid.Column="1" Spacing="8">
                         <TextBlock Text="reMarkable Paper Pro" FontSize="20" FontWeight="SemiBold"/>
                         
-                        <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="6">
+                        <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="6">
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Status:" Foreground="#666"/>
                             <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DeviceStatus}" FontWeight="SemiBold">
                                 <TextBlock.Foreground>
@@ -70,6 +70,18 @@
                             
                             <TextBlock Grid.Row="4" Grid.Column="0" Text="Storage:" Foreground="#666"/>
                             <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding StorageInfo, FallbackValue='-- / --'}"/>
+                            
+                            <!-- Sync Server Status Row -->
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Backend Server:" Foreground="#666" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                                <Ellipse Width="10" Height="10" VerticalAlignment="Center" Fill="{Binding IsServerRunning, Converter={StaticResource BoolToStatusBrushConverter}}"/>
+                                <TextBlock Text="{Binding ServerStatusText}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                <Button Content="Start Server" 
+                                        Classes="small stroke" 
+                                        IsVisible="{Binding !IsServerRunning}"
+                                        Command="{Binding StartServerCommand}"
+                                        Padding="8,4" Margin="10,0,0,0"/>
+                            </StackPanel>
                         </Grid>
                     </StackPanel>
                 </Grid>

@@ -19,6 +19,7 @@ public interface IDatabaseService : IDisposable
     // Page metadata management
     Task<PageMetadata?> GetPageMetadataAsync(string documentId, string pageId);
     Task<List<PageMetadata>> GetPendingPagesAsync(int limit = 100);
+    Task<List<PageMetadata>> GetRecentPagesAsync(int limit = 100);
     Task<List<PageMetadata>> GetPagesByStatusAsync(SyncStatus status);
     Task SavePageMetadataAsync(PageMetadata metadata);
     Task UpdatePageStatusAsync(string documentId, string pageId, SyncStatus status, string? error = null);

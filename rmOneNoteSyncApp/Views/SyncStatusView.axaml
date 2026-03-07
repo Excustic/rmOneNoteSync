@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:rmOneNoteSyncApp.ViewModels"
+             xmlns:models="using:rmOneNoteSyncApp.Models"
              x:Class="rmOneNoteSyncApp.Views.SyncStatusView"
              x:DataType="vm:SyncStatusViewModel">
     
@@ -42,8 +43,12 @@
                         BoxShadow="0 2 10 0 #10000000" Padding="15">
                     <StackPanel>
                         <TextBlock Text="Received" Foreground="#666" FontSize="12"/>
-                        <TextBlock Text="{Binding TotalReceived}" 
-                                   FontSize="28" FontWeight="Bold" Foreground="#3b82f6"/>
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{Binding TotalReceivedNotebooks}" FontSize="24" FontWeight="Bold" Foreground="#3b82f6"/>
+                            <TextBlock Text="Notebooks, " VerticalAlignment="Bottom" Margin="0,0,0,3" FontSize="11" Foreground="#9ca3af"/>
+                            <TextBlock Text="{Binding TotalReceivedPages}" FontSize="24" FontWeight="Bold" Foreground="#3b82f6"/>
+                            <TextBlock Text="Pages" VerticalAlignment="Bottom" Margin="0,0,0,3" FontSize="11" Foreground="#9ca3af"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
                 
@@ -51,8 +56,12 @@
                         BoxShadow="0 2 10 0 #10000000" Padding="15">
                     <StackPanel>
                         <TextBlock Text="Pending" Foreground="#666" FontSize="12"/>
-                        <TextBlock Text="{Binding TotalPending}" 
-                                   FontSize="28" FontWeight="Bold" Foreground="#f59e0b"/>
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{Binding TotalPendingNotebooks}" FontSize="24" FontWeight="Bold" Foreground="#f59e0b"/>
+                            <TextBlock Text="Notebooks, " VerticalAlignment="Bottom" Margin="0,0,0,3" FontSize="11" Foreground="#9ca3af"/>
+                            <TextBlock Text="{Binding TotalPendingPages}" FontSize="24" FontWeight="Bold" Foreground="#f59e0b"/>
+                            <TextBlock Text="Pages" VerticalAlignment="Bottom" Margin="0,0,0,3" FontSize="11" Foreground="#9ca3af"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
                 
@@ -60,8 +69,12 @@
                         BoxShadow="0 2 10 0 #10000000" Padding="15">
                     <StackPanel>
                         <TextBlock Text="Uploaded" Foreground="#666" FontSize="12"/>
-                        <TextBlock Text="{Binding TotalUploaded}" 
-                                   FontSize="28" FontWeight="Bold" Foreground="#10b981"/>
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{Binding TotalUploadedNotebooks}" FontSize="24" FontWeight="Bold" Foreground="#10b981"/>
+                            <TextBlock Text="Notebooks, " VerticalAlignment="Bottom" Margin="0,0,0,3" FontSize="11" Foreground="#9ca3af"/>
+                            <TextBlock Text="{Binding TotalUploadedPages}" FontSize="24" FontWeight="Bold" Foreground="#10b981"/>
+                            <TextBlock Text="Pages" VerticalAlignment="Bottom" Margin="0,0,0,3" FontSize="11" Foreground="#9ca3af"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
                 
@@ -69,8 +82,12 @@
                         BoxShadow="0 2 10 0 #10000000" Padding="15">
                     <StackPanel>
                         <TextBlock Text="Failed" Foreground="#666" FontSize="12"/>
-                        <TextBlock Text="{Binding TotalFailed}" 
-                                   FontSize="28" FontWeight="Bold" Foreground="#ef4444"/>
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{Binding TotalFailedNotebooks}" FontSize="24" FontWeight="Bold" Foreground="#ef4444"/>
+                            <TextBlock Text="Notebooks, " VerticalAlignment="Bottom" Margin="0,0,0,3" FontSize="11" Foreground="#9ca3af"/>
+                            <TextBlock Text="{Binding TotalFailedPages}" FontSize="24" FontWeight="Bold" Foreground="#ef4444"/>
+                            <TextBlock Text="Pages" VerticalAlignment="Bottom" Margin="0,0,0,3" FontSize="11" Foreground="#9ca3af"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -111,24 +128,28 @@
                               MinHeight="300"
                               MaxHeight="500">
                         <DataGrid.Columns>
+                            <DataGridTextColumn Header="Virtual Path" 
+                                                Binding="{Binding VirtualPath}" 
+                                                Width="*"/>
                             <DataGridTextColumn Header="Status" 
                                                 Binding="{Binding StatusDisplay}" 
-                                                Width="100"/>
-                            <DataGridTextColumn Header="Notebook" 
-                                                Binding="{Binding Notebook}" 
                                                 Width="150"/>
-                            <DataGridTextColumn Header="Section" 
-                                                Binding="{Binding Section}" 
-                                                Width="150"/>
-                            <DataGridTextColumn Header="Page" 
-                                                Binding="{Binding PageName}" 
-                                                Width="*"/>
-                            <DataGridTextColumn Header="Size" 
-                                                Binding="{Binding FileSize}" 
-                                                Width="80"/>
-                            <DataGridTextColumn Header="Received" 
+                            <DataGridTextColumn Header="Time" 
                                                 Binding="{Binding ReceivedTime, StringFormat='{}{0:HH:mm:ss}'}" 
-                                                Width="100"/>
+                                                Width="120"/>
+                            <DataGridTemplateColumn Header="OneNote Page" Width="100">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:SyncItem">
+                                        <Button Content="Open"
+                                                Command="{ReflectionBinding $parent[UserControl].DataContext.OpenUrlCommand}"
+                                                CommandParameter="{Binding OneNoteUrl}"
+                                                IsVisible="{Binding OneNoteUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Padding="10,5"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
                 </StackPanel>

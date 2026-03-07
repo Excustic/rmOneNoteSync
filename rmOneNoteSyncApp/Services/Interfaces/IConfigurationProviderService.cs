@@ -6,7 +6,7 @@ namespace rmOneNoteSyncApp.Services.Interfaces;
 public interface IConfigurationProviderService
 {
         Task<string> GetConfigurationJsonAsync(string deviceId);
-        Task<bool> UpdateDeviceConfigurationAsync();
+        Task<bool> UpdateDeviceConfigurationAsync(bool restartService = true);
         string GetHostIpAddress();
         int GetServerPort();
 }

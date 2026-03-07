@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -64,6 +64,7 @@ class Program
                 services.AddSingleton<IConfigurationProviderService, ConfigurationProviderService>();
                 services.AddSingleton<ISyncServerService, SyncServerService>();
                 services.AddSingleton<IOneNoteClient, OneNoteClient>();
+                services.AddSingleton<IRmConverterService, RmConverterService>();
                 
                 // Register ViewModels
                 services.AddSingleton<MainViewModel>();

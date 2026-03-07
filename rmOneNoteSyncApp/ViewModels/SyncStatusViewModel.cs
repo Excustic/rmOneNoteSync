@@ -35,16 +35,28 @@ public partial class SyncStatusViewModel : ViewModelBase
     private string _serverStatus = "Server stopped";
     
     [ObservableProperty]
-    private int _totalReceived;
+    private int _totalReceivedPages;
     
     [ObservableProperty]
-    private int _totalUploaded;
+    private int _totalReceivedNotebooks;
     
     [ObservableProperty]
-    private int _totalPending;
+    private int _totalUploadedPages;
     
     [ObservableProperty]
-    private int _totalFailed;
+    private int _totalUploadedNotebooks;
+    
+    [ObservableProperty]
+    private int _totalPendingPages;
+    
+    [ObservableProperty]
+    private int _totalPendingNotebooks;
+    
+    [ObservableProperty]
+    private int _totalFailedPages;
+    
+    [ObservableProperty]
+    private int _totalFailedNotebooks;
     
     [ObservableProperty]
     private bool _isSyncing;
@@ -76,6 +88,10 @@ public partial class SyncStatusViewModel : ViewModelBase
         _syncService.SyncProgress += OnSyncProgress;
         _syncService.SyncCompleted += OnSyncCompleted;
         
+        // Initialize server state
+        IsServerRunning = _syncServer.IsRunning;
+        ServerStatus = IsServerRunning ? "Server running on port 8080" : "Server stopped";
+        
         // Load initial data
         Task.Run(LoadSyncStatusAsync);
         
@@ -90,31 +106,57 @@ public partial class SyncStatusViewModel : ViewModelBase
     {
         try
         {
-            // Load recent sync items from database
-            var recentPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Pending);
+            // Load overall stats
+            var pendingPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Pending);
             var uploadedPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Uploaded);
             var failedPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Failed);
+            var skippedPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Skipped);
+            
+            _logger?.LogInformation("Loading recent files. Found {Pending} pending, {Uploaded} uploaded, {Failed} failed, {Skipped} skipped.", 
+                pendingPages.Count, uploadedPages.Count, failedPages.Count, skippedPages.Count);
+            
+            // Load actual recent files regardless of status
+            var recentPages = await _databaseService.GetRecentPagesAsync(50);
+            _logger?.LogInformation("Loaded {Count} recent pages from DB.", recentPages.Count);
+            
+            // Load Notebook stats by grabbing tracked Collections mapped to Sync Configuration directly!
+            var config = await _databaseService.GetConfigurationAsync();
+            var whitelistedIds = config?.SyncFiles ?? new List<string>();
+            var allDocs = await _databaseService.GetAllDocumentsAsync();
+            var rootBooks = allDocs.Count(d => whitelistedIds.Contains(d.DocumentId));
             
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                SyncItems.Clear();
-                
-                // Add recent items
-                foreach (var page in recentPages.Take(50))
+                try 
                 {
-                    SyncItems.Add(MapToSyncItem(page));
+                    SyncItems.Clear();
+                    
+                    // Add recent items
+                    foreach (var page in recentPages)
+                    {
+                        var item = MapToSyncItem(page);
+                        SyncItems.Add(item);
+                    }
+                    
+                    _logger?.LogInformation("Successfully bound {Count} items to UI.", SyncItems.Count);
+                }
+                catch (Exception uiEx)
+                {
+                    _logger?.LogError(uiEx, "Failed to map items in UI thread");
                 }
                 
-                foreach (var page in uploadedPages.Take(20))
-                {
-                    SyncItems.Add(MapToSyncItem(page));
-                }
+                // Update UI Counter logic separating notebooks from pages explicitly
+                TotalPendingPages = pendingPages.Count;
+                TotalPendingNotebooks = pendingPages.Select(p => p.DocumentId).Distinct().Count();
                 
-                // Update statistics
-                TotalPending = recentPages.Count;
-                TotalUploaded = uploadedPages.Count;
-                TotalFailed = failedPages.Count;
-                TotalReceived = TotalPending + TotalUploaded + TotalFailed;
+                TotalUploadedPages = uploadedPages.Count;
+                TotalUploadedNotebooks = uploadedPages.Select(p => p.DocumentId).Distinct().Count();
+                
+                TotalFailedPages = failedPages.Count;
+                TotalFailedNotebooks = failedPages.Select(p => p.DocumentId).Distinct().Count();
+                
+                TotalReceivedPages = TotalPendingPages + TotalUploadedPages + TotalFailedPages + skippedPages.Count;
+                TotalReceivedNotebooks = rootBooks;
             });
         }
         catch (Exception ex)
@@ -144,8 +186,16 @@ public partial class SyncStatusViewModel : ViewModelBase
         };
     }
     
-    private void OnFileReceived(object? sender, FileReceivedEventArgs e)
+    private async void OnFileReceived(object? sender, FileReceivedEventArgs e)
     {
+        var config = await _databaseService.GetConfigurationAsync();
+        var whitelist = config?.SyncFiles ?? new List<string>();
+        
+        if (!whitelist.Contains(e.DocumentId))
+        {
+            return; // Ignore non-whitelisted documents entirely.
+        }
+        
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             var (notebook, section, pageName) = ParseVirtualPath(e.VirtualPath);
@@ -167,17 +217,13 @@ public partial class SyncStatusViewModel : ViewModelBase
             // Add to beginning of list
             SyncItems.Insert(0, item);
             
-            // Update counters
-            TotalReceived++;
-            TotalPending++;
+            // Update counters based on the new logic
+            TotalReceivedPages++;
+            TotalPendingPages++;
+            // Note: TotalReceivedNotebooks doesn't reliably increment per file event since we count distincts, 
+            // relying on the next load tick to reconstruct the accurate graph size.
             
             _logger?.LogInformation("File received: {Path}", e.VirtualPath);
-            
-            // Auto-start sync if enabled
-            if (!_isSyncing)
-            {
-                Task.Run(ProcessQueueAsync);
-            }
         });
     }
     
@@ -249,108 +295,20 @@ public partial class SyncStatusViewModel : ViewModelBase
     [RelayCommand]
     private async Task ProcessQueueAsync()
     {
-        if (IsSyncing)
+        if (_syncService.IsSyncing)
+        {
+            _logger?.LogWarning("Cannot process queue, sync is already running");
             return;
+        }
         
         try
         {
-            IsSyncing = true;
-            SyncProgress = "Processing sync queue...";
-            
-            // Get pending pages
-            var pendingPages = await _databaseService.GetPendingPagesAsync(10);
-            
-            foreach (var page in pendingPages)
-            {
-                try
-                {
-                    SyncProgress = $"Uploading {page.Title}...";
-                    
-                    // Parse path structure
-                    var (notebook, section, pageName) = ParseVirtualPath(page.VirtualPath);
-                    
-                    // Ensure notebook exists
-                    var notebooks = await _oneNoteClient.GetNotebooksAsync();
-                    var targetNotebook = notebooks.FirstOrDefault(n => n.DisplayName == notebook);
-                    
-                    if (targetNotebook == null)
-                    {
-                        targetNotebook = await _oneNoteClient.CreateNotebookAsync(notebook);
-                    }
-                    
-                    // Ensure section exists
-                    var sections = await _oneNoteClient.GetSectionsAsync(targetNotebook.Id!);
-                    var targetSection = sections.FirstOrDefault(s => s.DisplayName == section);
-                    
-                    if (targetSection == null)
-                    {
-                        targetSection = await _oneNoteClient.CreateSectionAsync(targetNotebook.Id!, section);
-                    }
-                    
-                    // Read .rm file
-                    var rmData = await File.ReadAllBytesAsync(page.LocalFilePath);
-                    
-                    // Upload to OneNote as InkML
-                    var metadata = new Dictionary<string, string>
-                    {
-                        ["Original Path"] = page.VirtualPath,
-                        ["Document ID"] = page.DocumentId,
-                        ["Page Number"] = page.PageNumber,
-                        ["Imported"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
-                    };
-                    
-                    var oneNotePageId = await _oneNoteClient.UploadInkMLPageAsync(
-                        targetSection.Id!,
-                        pageName,
-                        rmData,
-                        metadata);
-                    
-                    // Update database
-                    await _databaseService.UpdatePageStatusAsync(
-                        page.DocumentId,
-                        page.PageId,
-                        SyncStatus.Uploaded);
-                    
-                    // Update UI
-                    var syncItem = SyncItems.FirstOrDefault(i => 
-                        i.DocumentId == page.DocumentId && i.PageId == page.PageId);
-                    
-                    if (syncItem != null)
-                    {
-                        syncItem.Status = SyncStatus.Uploaded;
-                        syncItem.OneNoteUrl = $"onenote:///pages/{oneNotePageId}";
-                    }
-                    
-                    TotalUploaded++;
-                    TotalPending--;
-                    
-                    _logger?.LogInformation("Successfully uploaded {Page} to OneNote", pageName);
-                }
-                catch (Exception ex)
-                {
-                    _logger?.LogError(ex, "Failed to upload page {Page}", page.Title);
-                    
-                    await _databaseService.UpdatePageStatusAsync(
-                        page.DocumentId,
-                        page.PageId,
-                        SyncStatus.Failed,
-                        ex.Message);
-                    
-                    TotalFailed++;
-                    TotalPending--;
-                }
-            }
-            
-            SyncProgress = "Queue processing complete";
+            // Allow manual user trigger through the SyncService orchestrator
+            await _syncService.SyncAllAsync();
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Queue processing failed");
-            SyncProgress = $"Error: {ex.Message}";
-        }
-        finally
-        {
-            IsSyncing = false;
+            _logger?.LogError(ex, "Failed to start manual sync");
         }
     }
     
@@ -368,22 +326,40 @@ public partial class SyncStatusViewModel : ViewModelBase
                 SyncStatus.Pending);
         }
         
-        TotalPending += failedPages.Count;
-        TotalFailed = 0;
-        
-        // Reload and process
+        // Reload entirely from database to correctly display new Recents state
         await LoadSyncStatusAsync();
-        await ProcessQueueAsync();
+        
+        // Start processing if we reset anything
+        if (failedPages.Count > 0)
+        {
+            await ProcessQueueAsync();
+        }
     }
     
     [RelayCommand]
     private async Task ClearCompletedAsync()
     {
-        // Clear uploaded items from view
-        SyncItems.Clear();
-        
-        // Reload only pending and failed
         await LoadSyncStatusAsync();
+    }
+    
+    [RelayCommand]
+    private void OpenUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return;
+
+        try
+        {
+            var ps = new System.Diagnostics.ProcessStartInfo(url)
+            { 
+                UseShellExecute = true, 
+                Verb = "open" 
+            };
+            System.Diagnostics.Process.Start(ps);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to open URL {Url}", url);
+        }
     }
     
     private (string notebook, string section, string page) ParseVirtualPath(string virtualPath)
@@ -440,7 +416,11 @@ public class SyncItem : ObservableObject
     public SyncStatus Status
     {
         get => _status;
-        set => SetProperty(ref _status, value);
+        set 
+        {
+            SetProperty(ref _status, value);
+            OnPropertyChanged(nameof(StatusDisplay));
+        }
     }
     
     public string? LastError { get; set; }
@@ -452,6 +432,7 @@ public class SyncItem : ObservableObject
         SyncStatus.InProgress => "🔄 Uploading...",
         SyncStatus.Uploaded => "✅ Uploaded",
         SyncStatus.Failed => "❌ Failed",
+        SyncStatus.Skipped => "⏭️ Skipped",
         _ => "Unknown"
     };
 }

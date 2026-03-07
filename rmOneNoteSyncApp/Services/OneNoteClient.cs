@@ -25,9 +25,10 @@ public interface IOneNoteClient
     Task<Notebook> CreateNotebookAsync(string displayName);
     Task<List<Section>> GetSectionsAsync(string notebookId);
     Task<Section> CreateSectionAsync(string notebookId, string displayName);
+    Task<List<OneNotePage>> GetPagesAsync(string sectionId);
     Task<OneNotePage> CreatePageAsync(string sectionId, string title, string htmlContent);
     Task<OneNotePage> UpdatePageAsync(string pageId, string htmlContent);
-    Task<string> UploadInkMLPageAsync(string sectionId, string title, byte[] inkmlData, Dictionary<string, string> metadata);
+    Task<string> UploadInkMLPageAsync(string sectionId, string title, byte[] inkmlData, byte[] htmlData, Dictionary<string, string> metadata);
     Task<bool> DeletePageAsync(string pageId);
     Task<OneNotePage> GetPageAsync(string pageId);
     Task<Stream> GetPageContentAsync(string pageId);
@@ -107,10 +108,11 @@ public class OneNoteClient : IOneNoteClient
                 $"{OneNoteBaseUrl}/notebooks");
             
             var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
             
             var json = await response.Content.ReadAsStringAsync();
-            var result = JsonSerializer.Deserialize<ODataResponse<Notebook>>(json);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var result = JsonSerializer.Deserialize<ODataResponse<Notebook>>(json, options);
             
             _logger.LogInformation("Found {Count} notebooks", result?.Value?.Count ?? 0);
             return result?.Value ?? new List<Notebook>();
@@ -139,10 +141,11 @@ public class OneNoteClient : IOneNoteClient
                 "application/json");
             
             var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
             
             var json = await response.Content.ReadAsStringAsync();
-            var notebook = JsonSerializer.Deserialize<Notebook>(json);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var notebook = JsonSerializer.Deserialize<Notebook>(json, options);
             
             _logger.LogInformation("Created notebook with ID: {Id}", notebook?.Id);
             return notebook!;
@@ -168,7 +171,8 @@ public class OneNoteClient : IOneNoteClient
             response.EnsureSuccessStatusCode();
             
             var json = await response.Content.ReadAsStringAsync();
-            var result = JsonSerializer.Deserialize<ODataResponse<Section>>(json);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var result = JsonSerializer.Deserialize<ODataResponse<Section>>(json, options);
             
             return result?.Value ?? new List<Section>();
         }
@@ -197,10 +201,11 @@ public class OneNoteClient : IOneNoteClient
                 "application/json");
             
             var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
             
             var json = await response.Content.ReadAsStringAsync();
-            var section = JsonSerializer.Deserialize<Section>(json);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var section = JsonSerializer.Deserialize<Section>(json, options);
             
             _logger.LogInformation("Created section with ID: {Id}", section?.Id);
             return section!;
@@ -208,6 +213,32 @@ public class OneNoteClient : IOneNoteClient
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to create section");
+            throw;
+        }
+    }
+    
+    public async Task<List<OneNotePage>> GetPagesAsync(string sectionId)
+    {
+        try
+        {
+            _logger.LogInformation("Fetching pages for section: {Id}", sectionId);
+            
+            var request = await CreateAuthenticatedRequestAsync(
+                HttpMethod.Get, 
+                $"{OneNoteBaseUrl}/sections/{sectionId}/pages?$select=id,title,createdDateTime,lastModifiedDateTime,contentUrl,links");
+            
+            var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
+            
+            var json = await response.Content.ReadAsStringAsync();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var result = JsonSerializer.Deserialize<ODataResponse<OneNotePage>>(json, options);
+            
+            return result?.Value ?? new List<OneNotePage>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get pages for section {Id}", sectionId);
             throw;
         }
     }
@@ -230,10 +261,11 @@ public class OneNoteClient : IOneNoteClient
             request.Content = new StringContent(fullHtml, Encoding.UTF8, "text/html");
             
             var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
             
             var json = await response.Content.ReadAsStringAsync();
-            var page = JsonSerializer.Deserialize<OneNotePage>(json);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var page = JsonSerializer.Deserialize<OneNotePage>(json, options);
             
             _logger.LogInformation("Created page with ID: {Id}", page?.Id);
             return page!;
@@ -249,6 +281,7 @@ public class OneNoteClient : IOneNoteClient
         string sectionId, 
         string title, 
         byte[] inkmlData,
+        byte[] htmlData,
         Dictionary<string, string> metadata)
     {
         try
@@ -261,22 +294,40 @@ public class OneNoteClient : IOneNoteClient
                 $"{OneNoteBaseUrl}/sections/{sectionId}/pages");
             
             // Create multipart content for InkML upload
-            using var content = new MultipartFormDataContent("----Boundary");
+            using var content = new MultipartFormDataContent();
             
-            // Add the presentation part (HTML that references the InkML)
-            var presentationHtml = CreateInkMLPresentationHtml(title, metadata);
-            content.Add(new StringContent(presentationHtml, Encoding.UTF8, "text/html"), 
-                "Presentation");
-            
-            // Add the InkML data part
+            // Add the InkML data part first
             var inkmlContent = new ByteArrayContent(inkmlData);
             inkmlContent.Headers.ContentType = new MediaTypeHeaderValue("application/inkml+xml");
-            content.Add(inkmlContent, "InkML", "drawing.xml");
+            content.Add(inkmlContent, "presentation-onenote-inkml", "drawing.xml");
+            
+            // Inject <title> tag into the HTML so OneNote doesn't default to "Untitled Page"
+            var htmlString = Encoding.UTF8.GetString(htmlData);
+            if (htmlString.Contains("<head>", StringComparison.OrdinalIgnoreCase))
+            {
+                htmlString = htmlString.Replace("<head>", $"<head>\n    <title>{title}</title>", StringComparison.OrdinalIgnoreCase);
+            }
+            else if (htmlString.Contains("<html>", StringComparison.OrdinalIgnoreCase))
+            {
+                htmlString = htmlString.Replace("<html>", $"<html>\n  <head>\n    <title>{title}</title>\n  </head>", StringComparison.OrdinalIgnoreCase);
+            }
+            else
+            {
+                // Fallback if rmc outputs no head/html blocks
+                htmlString = $"<html>\n  <head>\n    <title>{title}</title>\n  </head>\n  <body>\n{htmlString}\n  </body>\n</html>";
+            }
+            
+            var modifiedHtmlData = Encoding.UTF8.GetBytes(htmlString);
+            
+            // Add the presentation part (HTML that references the InkML)
+            var htmlContent = new ByteArrayContent(modifiedHtmlData);
+            htmlContent.Headers.ContentType = new MediaTypeHeaderValue("text/html");
+            content.Add(htmlContent, "presentation", "presentation.html");
             
             request.Content = content;
             
             var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
             
             // Extract page ID from response headers or body
             var location = response.Headers.Location?.ToString() ?? "";
@@ -319,7 +370,7 @@ public class OneNoteClient : IOneNoteClient
                 "application/json");
             
             var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
             
             _logger.LogInformation("Updated page {Id}", pageId);
             
@@ -371,10 +422,11 @@ public class OneNoteClient : IOneNoteClient
                 $"{OneNoteBaseUrl}/pages/{pageId}");
             
             var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
             
             var json = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<OneNotePage>(json)!;
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            return JsonSerializer.Deserialize<OneNotePage>(json, options)!;
         }
         catch (Exception ex)
         {
@@ -392,7 +444,7 @@ public class OneNoteClient : IOneNoteClient
                 $"{OneNoteBaseUrl}/pages/{pageId}/content");
             
             var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
             
             return await response.Content.ReadAsStreamAsync();
         }
@@ -449,6 +501,12 @@ public class OneNoteClient : IOneNoteClient
         var parts = location.Split('/');
         return parts.Length > 0 ? parts[^1] : "";
     }
+    
+    private async Task ThrowDetailedErrorAsync(HttpResponseMessage response)
+    {
+        var errorContent = await response.Content.ReadAsStringAsync();
+        throw new HttpRequestException($"Graph API Error ({response.StatusCode}): {errorContent}");
+    }
 }
 
 // Supporting models for Graph API responses
@@ -463,7 +521,8 @@ public class Notebook
     public string? DisplayName { get; set; }
     public DateTime CreatedDateTime { get; set; }
     public DateTime LastModifiedDateTime { get; set; }
-    public string? SelfLink { get; set; }
+    public string? Self { get; set; }
+    public OneNoteLinks? Links { get; set; }
 }
 
 public class Section
@@ -472,7 +531,8 @@ public class Section
     public string? DisplayName { get; set; }
     public DateTime CreatedDateTime { get; set; }
     public DateTime LastModifiedDateTime { get; set; }
-    public string? ParentNotebook { get; set; }
+    public Notebook? ParentNotebook { get; set; }
+    public OneNoteLinks? Links { get; set; }
 }
 
 public class OneNotePage
@@ -482,7 +542,19 @@ public class OneNotePage
     public DateTime CreatedDateTime { get; set; }
     public DateTime LastModifiedDateTime { get; set; }
     public string? ContentUrl { get; set; }
-    public string? WebUrl { get; set; }
+    public Section? ParentSection { get; set; }
+    public OneNoteLinks? Links { get; set; }
+}
+
+public class OneNoteLinks
+{
+    public OneNoteUrl? OneNoteClientUrl { get; set; }
+    public OneNoteUrl? OneNoteWebUrl { get; set; }
+}
+
+public class OneNoteUrl
+{
+    public string? Href { get; set; }
 }
 
 // Custom authentication provider for Graph SDK

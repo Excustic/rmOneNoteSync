@@ -33,6 +33,12 @@ public partial class LogsViewModel : ViewModelBase
     private bool _autoRefresh;
     
     [ObservableProperty]
+    private bool _isTailing = true;
+    
+    [ObservableProperty]
+    private string _exportStatus = "";
+    
+    [ObservableProperty]
     private int _refreshInterval = 5; // seconds
     
     private IDisposable? _refreshTimer;
@@ -241,11 +247,25 @@ public partial class LogsViewModel : ViewModelBase
             
             await File.WriteAllTextAsync(exportPath, LogContent);
             
+            ExportStatus = "Exported to Desktop!";
             _logger?.LogInformation("Exported log to: {Path}", exportPath);
+            
+            Task.Run(async () =>
+            {
+                await Task.Delay(3000);
+                ExportStatus = "";
+            });
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to export log");
+            ExportStatus = "Export Failed";
+            
+            Task.Run(async () =>
+            {
+                await Task.Delay(3000);
+                ExportStatus = "";
+            });
         }
     }
     

@@ -156,6 +156,17 @@ public class SqliteDatabaseService : IDatabaseService
         return results.Select(MapToPageMetadata).ToList();
     }
     
+    public async Task<List<PageMetadata>> GetRecentPagesAsync(int limit = 100)
+    {
+        var sql = @"
+            SELECT * FROM Pages 
+            ORDER BY LastModified DESC 
+            LIMIT @Limit";
+            
+        var results = await _connection!.QueryAsync<dynamic>(sql, new { Limit = limit });
+        return results.Select(MapToPageMetadata).ToList();
+    }
+    
     public async Task<List<PageMetadata>> GetPagesByStatusAsync(SyncStatus status)
     {
         var sql = "SELECT * FROM Pages WHERE Status = @Status";
@@ -220,7 +231,7 @@ public class SqliteDatabaseService : IDatabaseService
     public async Task<DocumentMetadata?> GetDocumentMetadataAsync(string documentId)
     {
         var sql = "SELECT * FROM Documents WHERE DocumentId = @DocumentId";
-        var result = await _connection!.QueryFirstOrDefaultAsync<dynamic>(sql, new { documentId });
+        var result = await _connection!.QueryFirstOrDefaultAsync<dynamic>(sql, new { DocumentId = documentId });
         
         if (result == null)
             return null;
@@ -244,7 +255,7 @@ public class SqliteDatabaseService : IDatabaseService
     private async Task<List<PageMetadata>> GetDocumentPagesAsync(string documentId)
     {
         var sql = "SELECT * FROM Pages WHERE DocumentId = @DocumentId";
-        var results = await _connection!.QueryAsync<dynamic>(sql, new { documentId });
+        var results = await _connection!.QueryAsync<dynamic>(sql, new { DocumentId = documentId });
         return results.Select(MapToPageMetadata).ToList();
     }
     
@@ -391,11 +402,11 @@ public class SqliteDatabaseService : IDatabaseService
             FileSizeBytes = row.FileSizeBytes ?? 0,
             LastModified = DateTime.Parse(row.LastModified),
             ContentHash = row.ContentHash ?? "",
-            Status = (SyncStatus)(row.Status ?? 0),
+            Status = (SyncStatus)Convert.ToInt32(row.Status ?? 0),
             LastSyncTime = row.LastSyncTime != null ? DateTime.Parse(row.LastSyncTime) : null,
             OneNotePageId = row.OneNotePageId,
             OneNotePageUrl = row.OneNotePageUrl,
-            RetryCount = row.RetryCount ?? 0,
+            RetryCount = Convert.ToInt32(row.RetryCount ?? 0),
             LastError = row.LastError
         };
     }

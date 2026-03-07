@@ -97,7 +97,7 @@ public class SshService(ILogger<SshService> logger) : ISshService, IDisposable
         {
             // Get device model and version
             info["Model"] = (await ExecuteCommandAsync("cat /sys/devices/soc0/machine")).Trim();
-            info["Version"] = (await ExecuteCommandAsync("cat /usr/share/remarkable/version")).Trim();
+            info["Version"] = (await ExecuteCommandAsync("cat /etc/os-release | grep IMG_VERSION | cut -d'\"' -f2")).Trim();
             info["Serial"] = (await ExecuteCommandAsync("cat /sys/devices/soc0/serial_number")).Trim();
             
             // Get storage info

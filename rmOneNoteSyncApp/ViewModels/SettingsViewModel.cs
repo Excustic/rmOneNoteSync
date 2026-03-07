@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,33 +66,39 @@ public partial class SettingsViewModel : ViewModelBase
         }
         catch { }
         
-        _sshService.OnConnectionChanged += SshServiceOnOnConnectionChanged;
-        SshServiceOnOnConnectionChanged(this, _sshService.IsConnected);
+        _sshService.OnConnectionChanged += SshServiceOnConnectionChanged;
+        SshServiceOnConnectionChanged(this, _sshService.IsConnected);
         // Load configuration
         Task.Run(LoadSettingsAsync);
     }
 
-    private void SshServiceOnOnConnectionChanged(object? sender, bool e)
+    private void SshServiceOnConnectionChanged(object? sender, bool e)
     {
-        if (e)
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            Task.Run(async() =>
+            if (e)
             {
-                var info = await _sshService.GetDeviceInfoAsync();
-                DeviceInfo = $"Connected to {info.GetValueOrDefault("Model", "reMarkable")}";
-            });
-        }
-        else
-        {
-            DeviceInfo = "No device connected.";
-            ServiceStatus = "N/A";
-        }
-        
-        IsDeviceConnected = e;
-        OnPropertyChanged(nameof(IsDeviceConnected));
-        OnPropertyChanged(nameof(ServiceStatus));
-        OnPropertyChanged(nameof(DeviceInfo));
-        DisconnectDeviceCommand.NotifyCanExecuteChanged();
+                Task.Run(async() =>
+                {
+                    var info = await _sshService.GetDeviceInfoAsync();
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => 
+                    {
+                        DeviceInfo = $"Connected to {info.GetValueOrDefault("Model", "reMarkable")}";
+                    });
+                });
+            }
+            else
+            {
+                DeviceInfo = "No device connected.";
+                ServiceStatus = "N/A";
+            }
+            
+            IsDeviceConnected = e;
+            OnPropertyChanged(nameof(IsDeviceConnected));
+            OnPropertyChanged(nameof(ServiceStatus));
+            OnPropertyChanged(nameof(DeviceInfo));
+            DisconnectDeviceCommand.NotifyCanExecuteChanged();
+        });
     }
 
     private async Task LoadSettingsAsync()
@@ -156,6 +165,25 @@ public partial class SettingsViewModel : ViewModelBase
             {
                 mainVm.ShowSetupScreen = true;
                 mainVm.ConnectionState = ConnectionState.Disconnected;
+            }
+
+            // Restart the application
+            var currentProcess = Process.GetCurrentProcess();
+            if (currentProcess.MainModule != null)
+            {
+                var exePath = currentProcess.MainModule.FileName;
+                _logger?.LogInformation("Restarting application: {Path}", exePath);
+                
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = exePath,
+                    UseShellExecute = true
+                });
+                
+                if (App.Current.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+                {
+                    desktop.Shutdown();
+                }
             }
         }
         catch (Exception ex)

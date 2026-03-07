@@ -147,6 +147,13 @@ public partial class FolderPickerViewModel : ViewModelBase
                     var node = ParseMetadataToNode(docId, content);
                     if (node != null)
                     {
+                        // Check if it's a native notebook (the directory exists)
+                        if (!node.IsFolder)
+                        {
+                            var checkDir = await _sshService.ExecuteCommandAsync($"[ -d \"/home/root/.local/share/remarkable/xochitl/{docId}\" ] && echo 'yes' || echo 'no'");
+                            node.IsNotebook = checkDir.Trim() == "yes";
+                        }
+
                         allNodes.Add(node);
                         nodeMap[node.Id] = node;
                     }
@@ -298,6 +305,7 @@ public partial class FolderPickerViewModel : ViewModelBase
     private void UpdateParentSelectionStates(FileNode node)
     {
         if (node.ParentId == null || node is {IsFolder: true, Children: null or {Count: 0}}) return;
+        
         FileNode? parent = null;
         foreach (var child in Folders)
         {
@@ -307,7 +315,13 @@ public partial class FolderPickerViewModel : ViewModelBase
                 break;
             }
         }
-        parent?.UpdateSelectionFromChildren();
+        
+        if (parent != null)
+        {
+            parent.UpdateSelectionFromChildren();
+            // Ascend the tree to bubble state
+            UpdateParentSelectionStates(parent);
+        }
     }
     /// <summary>
     /// Recursively searches for the node under a given FileNode.
@@ -450,7 +464,14 @@ public partial class FileNode : ObservableObject
     private string _path = "";
     
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDocument))]
     private bool _isFolder;
+    
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDocument))]
+    private bool _isNotebook;
+    
+    public bool IsDocument => !IsFolder && !IsNotebook;
     
     [ObservableProperty]
     private bool _isExpanded;

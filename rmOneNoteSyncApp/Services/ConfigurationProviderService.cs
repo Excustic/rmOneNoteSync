@@ -49,7 +49,7 @@ public class ConfigurationProviderService(
         });
     }
     
-    public async Task<bool> UpdateDeviceConfigurationAsync()
+    public async Task<bool> UpdateDeviceConfigurationAsync(bool restartService = true)
     {
         if (!sshService.IsConnected)
         {
@@ -114,25 +114,31 @@ public class ConfigurationProviderService(
             await sshService.ExecuteCommandAsync($"mv {tempPath} {configPath}");
             
             // Step 5: Restart the service to apply new configuration
-            logger.LogInformation("Restarting httpclient service to apply new configuration");
-            await sshService.ExecuteCommandAsync("systemctl restart onenote-sync-httpclient");
-            
-            // Give service time to restart
-            await Task.Delay(2000);
-            
-            // Verify service is running
-            var serviceStatus = await sshService.ExecuteCommandAsync("systemctl is-active onenote-sync-httpclient");
-            if (serviceStatus.Trim() == "active")
+            if (restartService)
             {
-                logger.LogInformation("✅ Configuration updated successfully! reMarkable will send files to {IP}:{Port}", 
-                    hostIp, ServerPort);
-                return true;
+                logger.LogInformation("Restarting httpclient service to apply new configuration");
+                await sshService.ExecuteCommandAsync("systemctl restart onenote-sync-httpclient");
+                
+                // Give service time to restart
+                await Task.Delay(2000);
+                
+                // Verify service is running
+                var serviceStatus = await sshService.ExecuteCommandAsync("systemctl is-active onenote-sync-httpclient");
+                if (serviceStatus.Trim() == "active")
+                {
+                    logger.LogInformation("✅ Configuration updated successfully! reMarkable will send files to {IP}:{Port}", 
+                        hostIp, ServerPort);
+                    return true;
+                }
+                else
+                {
+                    logger.LogWarning("⚠️ Service may not have started correctly. Status: {Status}", serviceStatus);
+                    return false;
+                }
             }
-            else
-            {
-                logger.LogWarning("⚠️ Service may not have started correctly. Status: {Status}", serviceStatus);
-                return false;
-            }
+            
+            logger.LogInformation("✅ Configuration file updated successfully without restarting service (IP: {IP}:{Port})", hostIp, ServerPort);
+            return true;
         }
         catch (Exception ex)
         {

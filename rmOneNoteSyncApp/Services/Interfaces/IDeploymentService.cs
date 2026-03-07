@@ -30,6 +30,7 @@ public enum DeploymentStage
 {
     Checking,
     PreparingFiles,
+    DownloadingBinaries,
     UploadingBinaries,
     ConfiguringServices,
     StartingServices,

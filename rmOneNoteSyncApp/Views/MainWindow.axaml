@@ -8,7 +8,7 @@
         x:Class="rmOneNoteSyncApp.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="reMarkable OneNote Sync"
-        Width="1200" Height="700"
+        Width="1600" Height="1200"
         MinWidth="900" MinHeight="500"
         WindowStartupLocation="CenterScreen">
     
