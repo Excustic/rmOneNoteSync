@@ -43,14 +43,15 @@ int http_get(const char* url, http_response_t* response);
  * Sends file as raw binary with custom headers:
  *   X-API-Key: <api_key>
  *   X-Document-Path: <virtual_path>
+ *   X-Document-Id: <doc_id>
  *   X-Filename: <basename of file_path>
  *   Content-Type: application/octet-stream
- * 
  * Example:
  *   http_response_t resp;
  *   if (http_post_file("http://server/upload", "secret-key",
  *                      "/path/to/file.rm", 
  *                      "Shared/Math/Page1",
+ *                      "uuid-document-1234",
  *                      &resp) == 0) {
  *       if (resp.status_code == 200) {
  *           printf("Upload successful\n");
@@ -60,7 +61,7 @@ int http_get(const char* url, http_response_t* response);
  */
 int http_post_file(const char* url, const char* api_key,
                    const char* file_path, const char* virtual_path,
-                   http_response_t* response);
+                   const char* doc_id, http_response_t* response);
 
 /**
  * http_response_free - Free response structure

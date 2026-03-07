@@ -173,7 +173,7 @@ int http_get(const char* url, http_response_t* response) {
     snprintf(request, sizeof(request),
         "GET %s HTTP/1.1\r\n"
         "Host: %s\r\n"
-        "User-Agent: RemarkableSyncClient/1.0\r\n"
+        "User-Agent: RemarkableSyncClient/1.1\r\n"
         "Connection: close\r\n"
         "\r\n",
         path, host);
@@ -195,7 +195,7 @@ int http_get(const char* url, http_response_t* response) {
  */
 int http_post_file(const char* url, const char* api_key,
                    const char* file_path, const char* virtual_path,
-                   http_response_t* response) {
+                   const char* doc_id, http_response_t* response) {
     char host[256];
     char path[1024];
     int port;
@@ -258,15 +258,16 @@ int http_post_file(const char* url, const char* api_key,
     int header_len = snprintf(headers, sizeof(headers),
         "POST %s HTTP/1.1\r\n"
         "Host: %s\r\n"
-        "User-Agent: RemarkableSyncClient/1.0\r\n"
+        "User-Agent: RemarkableSyncClient/1.1\r\n"
         "X-API-Key: %s\r\n"
         "X-Document-Path: %s\r\n"
+        "X-Document-Id: %s\r\n"
         "X-Filename: %s\r\n"
         "Content-Type: application/octet-stream\r\n"
         "Content-Length: %ld\r\n"
         "Connection: close\r\n"
         "\r\n",
-        path, host, api_key, virtual_path, filename, file_size);
+        path, host, api_key, virtual_path, doc_id, filename, file_size);
     
     // Send headers
     ssize_t sent = write(sockfd, headers, header_len);

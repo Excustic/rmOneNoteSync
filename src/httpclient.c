@@ -178,7 +178,7 @@ int upload_file(const char* doc_id, const char* page_uuid,
     // Perform upload
     http_response_t response;
     int result = http_post_file(config.server_url, config.api_key,
-                               file_path, full_virtual_path, &response);
+                               file_path, full_virtual_path, doc_id, &response);
 
     if (result == 0) {
         log_msg("Upload response: status=%d, size=%zu",
@@ -307,6 +307,7 @@ int main(int argc, char** argv) {
 
     log_msg("Configuration:");
     log_msg("  Server URL: %s", config.server_url);
+    log_msg("  Api Key: %s", config.api_key);
     log_msg("  Shared path: %s", config.shared_path);
     log_msg("  Upload interval: %d seconds", config.upload_interval_seconds);
     log_msg("  Max retries: %d", config.max_retries);

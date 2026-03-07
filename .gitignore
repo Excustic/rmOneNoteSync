@@ -6,4 +6,8 @@
 /bugs
 /.vs
 /test_tools/uploads
-/.idea
+/.idea/*
+/.history/*
+/.vscode/*
+/build/*
+/release/*
