@@ -32,6 +32,10 @@
         <PackageReference Include="Microsoft.Graph" Version="5.92.0" />
         <PackageReference Include="Microsoft.Graph.Core" Version="3.2.4" />
         <PackageReference Include="Microsoft.Identity.Client" Version="4.76.0" />
+        <PackageReference Include="Packaging.Targets" Version="0.1.232">
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+          <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
         <PackageReference Include="Serilog" Version="4.3.0" />
         <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
         <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
