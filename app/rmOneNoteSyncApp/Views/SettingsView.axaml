@@ -1,0 +1,99 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:rmOneNoteSyncApp.ViewModels"
+             x:Class="rmOneNoteSyncApp.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+    
+    
+    <ScrollViewer Padding="30" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="20">
+            <TextBlock Classes="section-title" Text="Settings"/>
+            
+            <!-- Device Settings -->
+            <Border Background="White" CornerRadius="8" BoxShadow="0 2 10 0 #10000000" Padding="20">
+                <StackPanel Spacing="15">
+                    <TextBlock Text="Device Settings" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                    
+                    <TextBlock Text="{Binding DeviceInfo}" Foreground="#6b7280"/>
+                    
+                    <Button Content="Disconnect Device and Reset" 
+                           Command="{Binding DisconnectDeviceCommand}"
+                           Background="#ef4444"
+                           Foreground="White"
+                           HorizontalAlignment="Left"/>
+                    
+                    <!-- Service Management Section -->
+                    <TextBlock Text="Service Management" FontSize="16" FontWeight="SemiBold" Margin="0,15,0,10"/>
+                    
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="10">
+                        <StackPanel Grid.Row="0" Grid.Column="0">
+                            <TextBlock Text="Sync Service Status" Foreground="#6b7280"/>
+                            <TextBlock Text="{Binding ServiceStatus}" FontWeight="SemiBold">
+                                <!-- <TextBlock.Foreground> -->
+                                <!--     <MultiBinding Converter="{StaticResource ServiceStatusToColorConverter}"> -->
+                                <!--         <Binding Path="ServiceStatus"/> -->
+                                <!--     </MultiBinding> -->
+                                <!-- </TextBlock.Foreground> -->
+                            </TextBlock>
+                        </StackPanel>
+                    
+                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                            <Button Content="Check Status"
+                                    Command="{Binding CheckServiceStatusCommand}"
+                                    IsEnabled="{Binding IsDeviceConnected}"/>
+                            <Button Content="Restart Services"
+                                    Command="{Binding RestartServiceCommand}"
+                                    IsEnabled="{Binding IsDeviceConnected}">
+                                <Button.IsVisible>
+                                    <Binding Path="!IsRestartingService"/>
+                                </Button.IsVisible>
+                            </Button>
+                            <ProgressBar IsIndeterminate="True"
+                                         Width="100"
+                                         IsVisible="{Binding IsRestartingService}"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+                
+            </Border>
+            
+            
+            <!-- Sync Settings -->
+            <Border Background="White" CornerRadius="8" BoxShadow="0 2 10 0 #10000000" Padding="20">
+                <StackPanel Spacing="15">
+                    <TextBlock Text="Sync Settings" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                    
+                    <CheckBox Content="Enable automatic sync" IsChecked="{Binding AutoSync}"/>
+                    <CheckBox Content="Enable WiFi sync" IsChecked="{Binding EnableWifiSync}"/>
+                    
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="Sync interval (seconds):" Foreground="#6b7280"/>
+                        <NumericUpDown Value="{Binding SyncIntervalSeconds}" 
+                                      Minimum="10" Maximum="86400" 
+                                      Increment="10"
+                                      Width="150"
+                                      HorizontalAlignment="Left"/>
+                    </StackPanel>
+                    
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="Cache retention (days):" Foreground="#6b7280"/>
+                        <NumericUpDown Value="{Binding CacheRetentionDays}" 
+                                      Minimum="1" Maximum="365" 
+                                      Increment="1"
+                                      Width="150"
+                                      HorizontalAlignment="Left"/>
+                    </StackPanel>
+                    
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="Save Settings" 
+                               Command="{Binding SaveSettingsCommand}"
+                               Classes="primary"/>
+                        
+                        <Button Content="Clear Cache" 
+                               Command="{Binding ClearCacheCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

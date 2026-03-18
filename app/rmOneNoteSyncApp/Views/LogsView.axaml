@@ -1,0 +1,190 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:rmOneNoteSyncApp.ViewModels"
+             x:Class="rmOneNoteSyncApp.Views.LogsView"
+             x:DataType="vm:LogsViewModel">
+    
+    <UserControl.Styles>
+        <Style Selector="TextBox.log-viewer">
+            <Setter Property="Background" Value="#1e293b"/>
+            <Setter Property="Foreground" Value="#10b981"/>
+            <Setter Property="FontFamily" Value="Cascadia Code,Consolas,Courier New,monospace"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="AcceptsReturn" Value="True"/>
+            <Setter Property="IsReadOnly" Value="True"/>
+            <Setter Property="TextWrapping" Value="NoWrap"/>
+        </Style>
+        
+        <Style Selector="TextBox.log-viewer:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#1e293b"/>
+        </Style>
+        
+        <Style Selector="TextBox.log-viewer:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#1e293b"/>
+        </Style>
+        
+        <Style Selector="ListBoxItem">
+            <Setter Property="Padding" Value="8,4"/>
+        </Style>
+    </UserControl.Styles>
+    
+    <Grid Margin="30" RowDefinitions="Auto,*">
+        <TextBlock Grid.Row="0" Classes="section-title" Text="Logs" Margin="0,0,0,20"/>
+        
+        <Grid Grid.Row="1" ColumnDefinitions="250,*" ColumnSpacing="20">
+            <!-- Log file list -->
+            <Border Grid.Column="0" 
+                    Background="White" 
+                    CornerRadius="8" 
+                    BoxShadow="0 2 10 0 #10000000" 
+                    Padding="15">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                        <TextBlock Text="Log Files" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                        <Button Content="Refresh" 
+                                Command="{Binding LoadLogsCommand}"
+                                HorizontalAlignment="Stretch"/>
+                    </StackPanel>
+                    
+                    <ScrollViewer>
+                        <ListBox ItemsSource="{Binding LogFiles}"
+                                 SelectedItem="{Binding SelectedLogFile}"
+                                 >
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="5">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" 
+                                                       FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Source}" 
+                                                       FontSize="11" 
+                                                       Foreground="#6b7280"/>
+                                            <TextBlock Text="{Binding Size}" 
+                                                       FontSize="11" 
+                                                       Foreground="#9ca3af"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+            
+            <!-- Log content viewer -->
+            <Border Grid.Column="1" 
+                    Background="White" 
+                    CornerRadius="8" 
+                    BoxShadow="0 2 10 0 #10000000" 
+                    Padding="15">
+                <DockPanel>
+                    <!-- Toolbar -->
+                    <Border DockPanel.Dock="Top" 
+                            Padding="0,0,0,10" 
+                            Margin="0,0,0,10"
+                            BorderBrush="#e5e7eb"
+                            BorderThickness="0,0,0,1">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" 
+                                       DataContext="{Binding SelectedLogFile}"
+                                       Text="{Binding DisplayName, TargetNullValue='Select a log file', FallbackValue='Select a log file'}"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                            
+                            <StackPanel Grid.Column="1" 
+                                        Orientation="Horizontal" 
+                                        Spacing="10"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="{Binding ExportStatus}" 
+                                           Foreground="#10b981" 
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0"/>
+                                           
+                                <ToggleButton Content="Tail Log"
+                                              IsChecked="{Binding IsTailing}"/>
+                                              
+                                <CheckBox Content="Auto-refresh" 
+                                          IsChecked="{Binding AutoRefresh}"/>
+                                          
+                                <NumericUpDown Value="{Binding RefreshInterval}"
+                                               Minimum="1" Maximum="60"
+                                               Width="100"
+                                               FormatString="0 sec"
+                                               ShowButtonSpinner="False"
+                                               ToolTip.Tip="Seconds between auto-refresh"
+                                               IsEnabled="{Binding AutoRefresh}"/>
+                                               
+                                <Button Content="Refresh" 
+                                        Command="{Binding RefreshCurrentLogCommand}"/>
+                                        
+                                <Button Content="Clear" 
+                                        Command="{Binding ClearLogCommand}"/>
+                                        
+                                <Button Content="Export" 
+                                        Command="{Binding ExportLogCommand}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    
+                    <!-- Log content -->
+                    <Border Background="#1e293b" CornerRadius="4">
+                        <Grid>
+                            <ScrollViewer x:Name="LogScrollViewer"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Auto">
+                                <TextBox x:Name="LogTextBox"
+                                         Classes="log-viewer"
+                                         Text="{Binding LogContent}"
+                                         IsReadOnly="True"
+                                         SelectionBrush="#475569"
+                                         CaretBrush="White"
+                                         Foreground="#e2e8f0"
+                                         Background="#1e293b"
+                                         MinHeight="400"/>
+                            </ScrollViewer>
+                            
+                            <!-- Scroll Navigation Buttons -->
+                            <StackPanel VerticalAlignment="Bottom"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,20,20"
+                                        Spacing="5">
+                                <Button x:Name="ScrollUpButton"
+                                        Width="30" Height="30"
+                                        CornerRadius="15"
+                                        Background="#3a3d4e"
+                                        Foreground="White"
+                                        ToolTip.Tip="Scroll to Top">
+                                    <PathIcon Data="M7.41,15.41L12,10.83L16.59,15.41L18,14L12,8L6,14L7.41,15.41Z" Width="12" Height="12"/>
+                                </Button>
+                                <Button x:Name="ScrollDownButton"
+                                        Width="30" Height="30"
+                                        CornerRadius="15"
+                                        Background="#3a3d4e"
+                                        Foreground="White"
+                                        ToolTip.Tip="Scroll to Bottom">
+                                    <PathIcon Data="M7.41,8.59L12,13.17L16.59,8.59L18,10L12,16L6,10L7.41,8.59Z" Width="12" Height="12"/>
+                                </Button>
+                            </StackPanel>
+                            
+                            <!-- Subtle Loading overlay -->
+                            <Border IsVisible="{Binding IsLoading}"
+                                    VerticalAlignment="Top" 
+                                    HorizontalAlignment="Right"
+                                    Margin="10"
+                                    Padding="8,4"
+                                    Background="#33000000"
+                                    CornerRadius="4">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <ProgressBar IsIndeterminate="True" Width="20" Height="4" Theme="{DynamicResource {x:Type ProgressBar}}"/>
+                                    <TextBlock Text="Loading..." FontSize="10" Foreground="#10b981"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,33 @@
+[21:27:53 INF] Database initialized at /home/excustic/.local/share/rmOneNoteSyncApp/sync.db
+[21:27:54 INF] Started device monitoring
+[21:27:54 INF] Started Linux network interface monitoring
+[21:27:55 INF] Reconnecting SSH using IP: 10.11.99.1, Password: kTgWdqIBVB
+[21:27:55 INF] Attempting SSH connection to 10.11.99.1
+[21:27:55 INF] SSH connection closed
+[21:27:55 INF] SSH connection established successfully
+[21:27:55 INF] DetectionServiceConnected: True, SSHConnected: True
+[21:27:55 INF] Sync server started on port 8080
+[21:27:55 DBG] Executing command: cat /sys/devices/soc0/machine
+[21:27:55 DBG] Executing command: cat /etc/os-release | grep IMG_VERSION | cut -d'"' -f2
+[21:27:55 DBG] Executing command: cat /sys/devices/soc0/serial_number
+[21:27:55 DBG] Executing command: df -h /home
+[21:27:55 DBG] Executing command: cat /home/root/onenote-sync/version.json
+[21:44:01 INF] SSH connection closed
+[21:44:01 INF] DetectionServiceConnected: False, SSHConnected: False
+[22:14:43 INF] Loading recent files. Found 1 pending, 1 uploaded, 0 failed, 0 skipped.
+[22:14:43 INF] Loaded 2 recent pages from DB.
+[22:14:44 INF] Successfully bound 2 items to UI.
+[22:14:45 INF] Connection state updated: False
+[22:14:45 INF] FolderPickerViewModel initialized - IsConnected: False, IsLoading: False
+[22:19:10 INF] Reconnecting SSH using IP: 10.11.99.1, Password: kTgWdqIBVB
+[22:19:10 INF] Attempting SSH connection to 10.11.99.1
+[22:19:10 INF] SSH connection closed
+[22:19:10 INF] Connection state updated: False
+[22:19:10 INF] SSH connection established successfully
+[22:19:10 INF] Connection state updated: True
+[22:19:10 INF] DetectionServiceConnected: True, SSHConnected: True
+[22:19:10 DBG] Executing command: cat /sys/devices/soc0/machine
+[22:19:10 DBG] Executing command: cat /etc/os-release | grep IMG_VERSION | cut -d'"' -f2
+[22:19:10 DBG] Executing command: cat /sys/devices/soc0/serial_number
+[22:19:11 DBG] Executing command: df -h /home
+[22:19:11 DBG] Executing command: cat /home/root/onenote-sync/version.json

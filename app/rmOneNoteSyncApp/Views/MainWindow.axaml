@@ -1,0 +1,183 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:rmOneNoteSyncApp.ViewModels"
+        xmlns:views="using:rmOneNoteSyncApp.Views"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
+        x:Class="rmOneNoteSyncApp.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="reMarkable OneNote Sync"
+        Width="1600" Height="1200"
+        MinWidth="900" MinHeight="500"
+        WindowStartupLocation="CenterScreen">
+    
+    <Window.Styles>
+        <!-- Define the app's color scheme and styles -->
+        <Style Selector="Border.sidebar">
+            <Setter Property="Background" Value="#1a1d2e"/>
+        </Style>
+        
+        <Style Selector="Button.nav-button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#e0e0e0"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="20,12"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        
+        <Style Selector="Button.nav-button:pointerover">
+            <Setter Property="Background" Value="#2a2d3e"/>
+        </Style>
+        
+        <Style Selector="Button.nav-button.selected">
+            <Setter Property="Background" Value="#3a3d4e"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        
+        <Style Selector="TextBlock.section-title">
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,20"/>
+        </Style>
+    </Window.Styles>
+    
+    <Grid>
+        <!-- Show setup screen if not configured, otherwise show main interface -->
+        <Panel>
+            <!-- Setup Screen (shown when device not configured) -->
+            <views:SetupView IsVisible="{Binding ShowSetupScreen}"/>
+            
+            <!-- Main Interface (shown when configured) -->
+            <Grid IsVisible="{Binding !ShowSetupScreen}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="250"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Left Sidebar Navigation -->
+                <Border Grid.Column="0" Classes="sidebar">
+                    <DockPanel>
+                        <!-- App Logo/Title -->
+                        <Border DockPanel.Dock="Top" Padding="20,25" BorderBrush="#2a2d3e" BorderThickness="0,0,0,1">
+                            <StackPanel>
+                                <TextBlock Text="reMarkable" FontSize="20" FontWeight="Bold" Foreground="White"/>
+                                <TextBlock Text="OneNote Sync" FontSize="14" Foreground="#a0a0a0" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        
+                        <!-- Navigation Buttons -->
+                        <ScrollViewer DockPanel.Dock="Top" VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="0,10">
+                                <Button Classes="nav-button" 
+                                        Classes.selected="{Binding CurrentView, Converter={StaticResource EqualityConverter}, ConverterParameter=Dashboard}"
+                                        Command="{Binding NavigateCommand}"
+                                        CommandParameter="Dashboard">
+                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                        <PathIcon Data="M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z" 
+                                                 Width="18" Height="18" Foreground="{Binding $parent[Button].Foreground}"/>
+                                        <TextBlock Text="Dashboard" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                
+                                <Button Classes="nav-button"
+                                        Classes.selected="{Binding CurrentView, Converter={StaticResource EqualityConverter}, ConverterParameter=FileBrowser}"
+                                        Command="{Binding NavigateCommand}"
+                                        CommandParameter="FileBrowser">
+                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                        <PathIcon Data="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z" 
+                                                 Width="18" Height="18" Foreground="{Binding $parent[Button].Foreground}"/>
+                                        <TextBlock Text="File Browser" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                
+                                <Button Classes="nav-button"
+                                        Classes.selected="{Binding CurrentView, Converter={StaticResource EqualityConverter}, ConverterParameter=SyncStatus}"
+                                        Command="{Binding NavigateCommand}"
+                                        CommandParameter="SyncStatus">
+                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                        <PathIcon Data="M12,18.17L8.83,15L7.42,16.41L12,21L16.59,16.41L15.17,15M12,5.83L15.17,9L16.58,7.59L12,3L7.41,7.59L8.83,9L12,5.83Z" 
+                                                 Width="18" Height="18" Foreground="{Binding $parent[Button].Foreground}"/>
+                                        <TextBlock Text="Sync Status" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                
+                                <Button Classes="nav-button"
+                                        Classes.selected="{Binding CurrentView, Converter={StaticResource EqualityConverter}, ConverterParameter=Logs}"
+                                        Command="{Binding NavigateCommand}"
+                                        CommandParameter="Logs">
+                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                        <PathIcon Data="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" 
+                                                 Width="18" Height="18" Foreground="{Binding $parent[Button].Foreground}"/>
+                                        <TextBlock Text="Logs" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                
+                                <Rectangle Height="1" Fill="#2a2d3e" Margin="20,10"/>
+                                
+                                <Button Classes="nav-button"
+                                        Classes.selected="{Binding CurrentView, Converter={StaticResource EqualityConverter}, ConverterParameter=Settings}"
+                                        Command="{Binding NavigateCommand}"
+                                        CommandParameter="Settings">
+                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                        <PathIcon Data="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97L21.54,14.63L19.66,17.78L17.07,16.97L15.58,18.01L15.22,20.77L11.78,20.77L11.42,18.01L9.93,16.97L7.34,17.78L5.46,14.63L7.57,12.97L7.5,12L7.57,11.03L5.46,9.37L7.34,6.22L9.93,7.03L11.42,5.99L11.78,3.23L15.22,3.23L15.58,5.99L17.07,7.03L19.66,6.22L21.54,9.37L19.43,11.03L19.5,12L19.43,12.97Z" 
+                                                 Width="18" Height="18" Foreground="{Binding $parent[Button].Foreground}"/>
+                                        <TextBlock Text="Settings" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </ScrollViewer>
+                        
+                        <!-- Connection Status at Bottom -->
+                        <Border DockPanel.Dock="Bottom" 
+                               BorderBrush="#2a2d3e" 
+                               BorderThickness="0,1,0,0" 
+                               Padding="20,15">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Ellipse Width="8" Height="8">
+                                        <Ellipse.Fill>
+                                            <SolidColorBrush Color="{Binding ConnectionState, Converter={StaticResource ConnectionStateToColorConverter}}"/>
+                                        </Ellipse.Fill>
+                                    </Ellipse>
+                                    <TextBlock Text="{Binding ConnectionStateText}" 
+                                              Foreground="#a0a0a0" FontSize="12"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding CurrentDevice.IpAddress, FallbackValue='Not connected'}" 
+                                          Foreground="#707070" FontSize="11" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
+                </Border>
+                
+                <!-- Main Content Area -->
+                <Border Grid.Column="1" Background="#f5f6fa">
+                    <ContentControl Grid.Column="1" Content="{Binding CurrentViewModel}">
+                        <ContentControl.DataTemplates>
+                            <!-- Define how each ViewModel maps to its View -->
+                            <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
+                                <views:DashboardView />
+                            </DataTemplate>
+                            <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+                                <views:SettingsView />
+                            </DataTemplate>
+                            <DataTemplate DataType="{x:Type vm:FolderPickerViewModel}">
+                                <views:FileBrowserView />
+                            </DataTemplate>
+                            <DataTemplate DataType="{x:Type vm:SyncStatusViewModel}">
+                                <views:SyncStatusView />
+                            </DataTemplate>
+                            <DataTemplate DataType="{x:Type vm:LogsViewModel}">
+                                <views:LogsView></views:LogsView>
+                            </DataTemplate>
+                            <!-- Add other view mappings -->
+                        </ContentControl.DataTemplates>
+                    </ContentControl>
+                </Border>
+            </Grid>
+        </Panel>
+    </Grid>
+</Window>

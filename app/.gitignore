@@ -1,0 +1,6 @@
+.vscode/*
+rmOneNoteSyncApp.sln.DotSettings.user
+.history/*
+rmOneNoteSyncApp/bin/*
+rmOneNoteSyncApp/obj/*
+.idea/*

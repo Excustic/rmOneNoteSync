@@ -1,0 +1,139 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:rmOneNoteSyncApp.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
+             x:Class="rmOneNoteSyncApp.Views.SetupView"
+             x:DataType="vm:MainViewModel">
+    
+    <Grid Background="#f5f6fa">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <StackPanel MaxWidth="600" Margin="40" VerticalAlignment="Center">
+                <!-- Welcome Header -->
+                <TextBlock Text="Welcome to reMarkable Sync" 
+                          FontSize="32" FontWeight="Bold" 
+                          HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                
+                <TextBlock Text="Let's set up your reMarkable tablet for OneNote synchronization" 
+                          FontSize="16" Foreground="#666" 
+                          HorizontalAlignment="Center" Margin="0,0,0,40"
+                          TextWrapping="Wrap"/>
+                
+                <!-- Setup Steps -->
+                <Border Background="White" CornerRadius="8" 
+                       BoxShadow="0 2 10 0 #10000000" Padding="30">
+                    <StackPanel Spacing="25">
+                        <!-- Step 1: USB Connection -->
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+                                <Border Width="30" Height="30" CornerRadius="15"
+                                       Background="{Binding IsConnected, Converter={StaticResource BoolToColorConverter}}">
+                                    <TextBlock Text="1" Foreground="White" 
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              FontWeight="Bold"/>
+                                </Border>
+                                <TextBlock Text="Connect your reMarkable" FontSize="18" FontWeight="SemiBold"
+                                          VerticalAlignment="Center"/>
+                            </StackPanel>
+                            
+                            <Border Background="#f8f9fa" CornerRadius="4" Padding="15" Margin="40,0,0,0">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="1. Connect your reMarkable via USB cable" TextWrapping="Wrap"/>
+                                    <TextBlock Text="2. Enable Developer Mode in Settings > Developer" TextWrapping="Wrap"/>
+                                    <TextBlock Text="3. Note the password shown on your device" TextWrapping="Wrap"/>
+                                    
+                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,10,0,0">
+                                        <PathIcon Data="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2Z"
+                                                 Width="16" Height="16">
+                                            <PathIcon.Foreground>
+                                                <SolidColorBrush Color="{Binding IsConnected, Converter={StaticResource BoolToStatusColorConverter}}"/>
+                                            </PathIcon.Foreground>
+                                        </PathIcon>
+                                        <TextBlock Text="{Binding DeviceStatusText}" 
+                                                  Foreground="{Binding IsConnected, Converter={StaticResource BoolToStatusBrushConverter}}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        
+                        <!-- Step 2: Authentication -->
+                        <StackPanel IsEnabled="{Binding IsConnected}">
+                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+                                <Border Width="30" Height="30" CornerRadius="15"
+                                       Background="{Binding IsAuthenticated, Converter={StaticResource BoolToColorConverter}}">
+                                    <TextBlock Text="2" Foreground="White" 
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              FontWeight="Bold"/>
+                                </Border>
+                                <TextBlock Text="Authenticate" FontSize="18" FontWeight="SemiBold"
+                                          VerticalAlignment="Center"/>
+                            </StackPanel>
+                            
+                            <StackPanel Margin="40,0,0,0" Spacing="10">
+                                <TextBlock Text="Enter the password from your reMarkable:" Foreground="#666"/>
+                                <TextBox PasswordChar="•" 
+                                        Watermark="Device password"
+                                        Text="{Binding DevicePassword}">
+                                    <TextBox.Classes>revealPasswordButton</TextBox.Classes>
+                                    <TextBox.IsEnabled>
+                                        <MultiBinding Converter="{StaticResource BoolAndConverter}">
+                                            <Binding Path="!IsAuthenticating"/>
+                                            <Binding Path="!IsAuthenticated"/>
+                                        </MultiBinding>
+                                    </TextBox.IsEnabled>
+                                </TextBox>
+                                <Button Content="Connect" 
+                                       Command="{Binding ConnectCommand}"
+                                       IsEnabled="{Binding CanConnect}"
+                                       HorizontalAlignment="Left"
+                                       Classes="primary"/>
+                                
+                                <TextBlock Text="{Binding AuthenticationError}" 
+                                          Foreground="Red" 
+                                          IsVisible="{Binding HasAuthenticationError}"
+                                          TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </StackPanel>
+                        
+                        <!-- Step 3: OneNote Setup -->
+                        <StackPanel IsEnabled="{Binding IsAuthenticated}">
+                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+                                <Border Width="30" Height="30" CornerRadius="15"
+                                       Background="{Binding IsOneNoteConfigured, Converter={StaticResource BoolToColorConverter}}">
+                                    <TextBlock Text="3" Foreground="White" 
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              FontWeight="Bold"/>
+                                </Border>
+                                <TextBlock Text="Configure OneNote" FontSize="18" FontWeight="SemiBold"
+                                          VerticalAlignment="Center"/>
+                            </StackPanel>
+                            
+                            <StackPanel Margin="40,0,0,0" Spacing="10">
+                                <TextBlock Text="Sign in to your Microsoft account to enable OneNote sync:" 
+                                          Foreground="#666" TextWrapping="Wrap"/>
+                                <Button Content="Sign in to Microsoft" 
+                                       Command="{Binding SignInToOneNoteCommand}"
+                                       HorizontalAlignment="Left"/>
+                                
+                                <TextBlock Text="{Binding OneNoteStatusText}" 
+                                          Foreground="{Binding IsOneNoteConfigured, Converter={StaticResource BoolToStatusBrushConverter}}"
+                                          IsVisible="{Binding OneNoteStatusText, Converter={StaticResource StringNotEmptyConverter}}"/>
+                            </StackPanel>
+                        </StackPanel>
+                        
+                        <!-- Complete Setup Button -->
+                        <Button Content="Complete Setup" 
+                               Command="{Binding CompleteSetupCommand}"
+                               IsEnabled="{Binding CanCompleteSetup}"
+                               HorizontalAlignment="Center"
+                               Margin="0,20,0,0"
+                               Padding="20,10"
+                               FontSize="16"
+                               Classes="primary"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

@@ -1,0 +1,123 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:rmOneNoteSyncApp.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="950" d:DesignHeight="700"
+             x:Class="rmOneNoteSyncApp.Views.FileBrowserView"
+             x:DataType="vm:FolderPickerViewModel">
+    
+    <UserControl.Styles>
+        <!-- TreeView item styling for better visual hierarchy -->
+        <Style Selector="TreeViewItem" x:DataType="vm:FileNode">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+        </Style>
+        
+        <!-- Folder icon style -->
+        <Style Selector="PathIcon.folder">
+            <Setter Property="Data" Value="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/>
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Foreground" Value="#f59e0b"/>
+        </Style>
+        
+        <Style Selector="PathIcon.notebook">
+            <Setter Property="Data" Value="M3 4C3 2.89 3.89 2 5 2H19C20.1 2 21 2.89 21 4V20C21 21.1 20.1 22 19 22H5C3.89 22 3 21.1 3 20V4M5 4V20H19V4H5M7 14H17V16H7V14M7 10H17V12H7V10M7 6H12V8H7V6Z"/>
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Foreground" Value="#8b5cf6"/>
+        </Style>
+        
+        <!-- Document icon style -->
+        <Style Selector="PathIcon.document">
+            <Setter Property="Data" Value="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Foreground" Value="#3b82f6"/>
+        </Style>
+    </UserControl.Styles>
+    
+    <ScrollViewer Padding="30" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="20">
+            <TextBlock Classes="section-title" Text="File Browser"/>
+            
+            <Border Background="White" CornerRadius="8" BoxShadow="0 2 10 0 #10000000" Padding="20">
+                <StackPanel>
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,15">
+                        <TextBlock Grid.Column="0" 
+                                   Text="Select folders and documents to sync with OneNote" 
+                                   VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                            <Button Content="Load Folders" 
+                                    Command="{Binding LoadFoldersCommand}"
+                                    IsEnabled="{Binding CanLoadFolders}"/>
+                            <Button Content="Save Selection" 
+                                    Command="{Binding SaveSelectionCommand}"
+                                    Classes="primary"
+                                    IsEnabled="{Binding HasLoadedFolders}"/>
+                        </StackPanel>
+                    </Grid>
+                    
+                    <!-- Tree view container -->
+                    <Border BorderBrush="#e5e7eb" BorderThickness="1" CornerRadius="4" MinHeight="400">
+                        <Panel>
+                            <!-- Show loading indicator when loading -->
+                            <ProgressBar IsIndeterminate="True" 
+                                         IsVisible="{Binding IsLoading}"
+                                         VerticalAlignment="Top"
+                                         Height="3"/>
+                            
+                            <!-- Show status message when no folders loaded -->
+                            <TextBlock Text="{Binding StatusMessage}" 
+                                       Foreground="#9ca3af"
+                                       Padding="10"
+                                       IsVisible="{Binding !HasLoadedFolders}"/>
+                            
+                            <!-- TreeView with checkboxes -->
+                            <ScrollViewer IsVisible="{Binding HasLoadedFolders}"
+                                          VerticalScrollBarVisibility="Auto">
+                                <TreeView ItemsSource="{Binding Folders}"
+                                          Padding="10">
+                                    <TreeView.ItemTemplate>
+                                        <TreeDataTemplate ItemsSource="{Binding Children}">
+                                            <Panel>
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <!-- Tri-state checkbox -->
+                                                    <CheckBox IsChecked="{Binding SelectionState}"
+                                                              IsThreeState="{Binding IsFolder}"
+                                                              Command="{Binding ((vm:FolderPickerViewModel)DataContext).ToggleSelectionCommand, RelativeSource={RelativeSource AncestorType=TreeView, Mode=FindAncestor}}"
+                                                              CommandParameter="{Binding}"/>
+
+                                                    
+                                                    <!-- Icon based on type -->
+                                                    <PathIcon Classes.folder="{Binding IsFolder}"
+                                                              Classes.notebook="{Binding IsNotebook}"
+                                                              Classes.document="{Binding IsDocument}"/>
+                                                    
+                                                    <!-- Name and item count for folders -->
+                                                    <TextBlock Text="{Binding Name}" 
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding ItemCountText}" 
+                                                               Foreground="#9ca3af"
+                                                               FontSize="12"
+                                                               VerticalAlignment="Center"
+                                                               IsVisible="{Binding IsFolder}"/>
+                                                </StackPanel>
+                                            </Panel>
+                                        </TreeDataTemplate>
+                                    </TreeView.ItemTemplate>
+                                </TreeView>
+                            </ScrollViewer>
+                        </Panel>
+                    </Border>
+                    
+                    <!-- Selection summary -->
+                    <TextBlock Text="{Binding SelectionSummary}" 
+                               Foreground="#6b7280"
+                               Margin="0,10,0,0"
+                               IsVisible="{Binding HasLoadedFolders}"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

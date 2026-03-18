@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AvaloniaProject">
+    <option name="projectPerEditor">
+      <map>
+        <entry key="rmOneNoteSyncApp/App.axaml" value="rmOneNoteSyncApp/rmOneNoteSyncApp.csproj" />
+        <entry key="rmOneNoteSyncApp/PasswordBox.axaml" value="rmOneNoteSyncApp/rmOneNoteSyncApp.csproj" />
+        <entry key="rmOneNoteSyncApp/Views/DashboardView.axaml" value="rmOneNoteSyncApp/rmOneNoteSyncApp.csproj" />
+        <entry key="rmOneNoteSyncApp/Views/FileBrowserView.axaml" value="rmOneNoteSyncApp/rmOneNoteSyncApp.csproj" />
+        <entry key="rmOneNoteSyncApp/Views/LogsView.axaml" value="rmOneNoteSyncApp/rmOneNoteSyncApp.csproj" />
+        <entry key="rmOneNoteSyncApp/Views/MainWindow.axaml" value="rmOneNoteSyncApp/rmOneNoteSyncApp.csproj" />
+        <entry key="rmOneNoteSyncApp/Views/SettingsView.axaml" value="rmOneNoteSyncApp/rmOneNoteSyncApp.csproj" />
+        <entry key="rmOneNoteSyncApp/Views/SetupView.axaml" value="rmOneNoteSyncApp/rmOneNoteSyncApp.csproj" />
+        <entry key="rmOneNoteSyncApp/Views/SyncStatusView.axaml" value="rmOneNoteSyncApp/rmOneNoteSyncApp.csproj" />
+      </map>
+    </option>
+  </component>
+</project>
