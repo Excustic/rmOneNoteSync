@@ -8,6 +8,7 @@ public interface ISyncServerService
     Task StartAsync(int port = 8080);
     Task StopAsync();
     bool IsRunning { get; }
+    event EventHandler<bool>? StatusChanged;
     event EventHandler<FileReceivedEventArgs>? FileReceived;
 }
 

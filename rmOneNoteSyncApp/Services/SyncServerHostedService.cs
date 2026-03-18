@@ -16,7 +16,7 @@ public class SyncServerHostedService(
     {
         try
         {
-            logger.LogInformation("Starting sync server hosted service");
+            logger.LogDebug("Starting sync server hosted service");
             await syncServer.StartAsync();
         }
         catch (Exception ex)
@@ -24,12 +24,12 @@ public class SyncServerHostedService(
             logger.LogError(ex, "Failed to start sync server");
         }
     }
-    
+
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         try
         {
-            logger.LogInformation("Stopping sync server hosted service");
+            logger.LogDebug("Stopping sync server hosted service");
             await syncServer.StopAsync();
         }
         catch (Exception ex)

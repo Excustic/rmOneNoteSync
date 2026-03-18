@@ -17,13 +17,13 @@ namespace rmOneNoteSyncApp.Services
     {
         private readonly ILogger<DeploymentService> _logger = logger;
         private readonly IConfigurationProviderService _configProvider = configProvider;
-        private const string REMOTE_BASE_PATH = "/home/root/onenote-sync";
+        public static readonly string REMOTE_BASE_PATH = "/home/root/onenote-sync";
 
         public event EventHandler<DeploymentProgressEventArgs>? DeploymentProgress;
 
         public async Task<DeploymentResult> CheckInstallationAsync(ISshService sshService)
         {
-            DeploymentResult result = new DeploymentResult();
+            DeploymentResult result = new();
 
             try
             {
@@ -43,7 +43,7 @@ namespace rmOneNoteSyncApp.Services
                     string versionContent = await sshService.ExecuteCommandAsync($"cat {REMOTE_BASE_PATH}/version.json");
                     if (string.IsNullOrEmpty(versionContent))
                     {
-                        throw new ArgumentNullException();
+                        throw new ArgumentNullException(nameof(versionContent));
                     }
 
                     result.InstalledVersion = ExtractVersionFromJson(versionContent);
@@ -74,7 +74,7 @@ namespace rmOneNoteSyncApp.Services
 
         public async Task<DeploymentResult> DeployAsync(ISshService sshService)
         {
-            DeploymentResult result = new DeploymentResult();
+            DeploymentResult result = new();
 
             try
             {
@@ -155,14 +155,14 @@ namespace rmOneNoteSyncApp.Services
 
         private static async Task CreateDirectoryStructureAsync(ISshService sshService)
         {
-            string[] directories = new[]
-            {
+            string[] directories =
+            [
                 REMOTE_BASE_PATH,
                 $"{REMOTE_BASE_PATH}/bin",
                 $"{REMOTE_BASE_PATH}/cache",
                 $"{REMOTE_BASE_PATH}/logs",
                 $"{REMOTE_BASE_PATH}/debug"
-            };
+            ];
 
             foreach (string? dir in directories)
             {
@@ -174,7 +174,7 @@ namespace rmOneNoteSyncApp.Services
         {
             ReportProgress("Fetching latest release from GitHub...", 0.1, DeploymentStage.DownloadingBinaries);
 
-            using HttpClient httpClient = new HttpClient();
+            using HttpClient httpClient = new();
             // GitHub API requires a User-Agent header to work
             httpClient.DefaultRequestHeaders.Add("User-Agent", "rmOneNoteSyncApp-Installer");
 
@@ -242,19 +242,19 @@ namespace rmOneNoteSyncApp.Services
                                    "CACHE_PATH=/home/root/onenote-sync/cache/.sync_cache";
 
             string versionJson = @"{
-          ""version"": ""1.1.0"",
+          ""version"": ""2.0.1"",
           ""installed_date"": """ + DateTime.UtcNow.ToString("o") + @""",
           ""components"": {
-            ""watcher"": ""1.0.0"",
-            ""httpclient"": ""1.1.0"",
-            ""cache_format"": ""2""
+            ""watcher"": ""2.0.1"",
+            ""httpclient"": ""2.0.1"",
+            ""cache_format"": ""4""
           }
         }";
 
             // Write configs via SSH
             _ = await sshService.ExecuteCommandAsync($"echo '{watcherConfig}' > {REMOTE_BASE_PATH}/watcher.conf");
             _ = await sshService.ExecuteCommandAsync($"echo '{versionJson}' > {REMOTE_BASE_PATH}/version.json");
-            
+
             // Generate httpclient.conf via ConfigurationProviderService bypassng service restart
             _ = await _configProvider.UpdateDeviceConfigurationAsync(restartService: false);
         }
@@ -338,13 +338,13 @@ namespace rmOneNoteSyncApp.Services
         {
             // Simple extraction - in production use proper JSON parsing
             int versionStart = json.IndexOf("\"version\":") + 11;
-            int versionEnd = json.IndexOf("\"", versionStart);
+            int versionEnd = json.IndexOf('\'', versionStart);
             return json[versionStart..versionEnd];
         }
 
         private void ReportProgress(string message, double progress, DeploymentStage stage)
         {
-            _logger.LogInformation("{Stage}: {Message} ({Progress:P})", stage, message, progress);
+            _logger.LogDebug("{Stage}: {Message} ({Progress:P})", stage, message, progress);
             DeploymentProgress?.Invoke(this, new DeploymentProgressEventArgs
             {
                 Message = message,
@@ -376,7 +376,7 @@ namespace rmOneNoteSyncApp.Services
 
         public async Task<DeploymentResult> UninstallAsync(ISshService sshService)
         {
-            DeploymentResult result = new DeploymentResult();
+            DeploymentResult result = new();
 
             try
             {

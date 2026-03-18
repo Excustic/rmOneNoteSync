@@ -5,8 +5,8 @@
              x:Class="rmOneNoteSyncApp.Views.SyncStatusView"
              x:DataType="vm:SyncStatusViewModel">
     
-    <ScrollViewer Padding="30" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="20">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="20" Margin="30">
             <TextBlock Classes="section-title" Text="Sync Status"/>
             
             <!-- Server Status Card -->
@@ -109,7 +109,7 @@
                     
                     <StackPanel Grid.Row="1" IsVisible="{Binding IsSyncing}">
                         <TextBlock Text="{Binding SyncProgress}" Margin="0,0,0,5"/>
-                        <ProgressBar IsIndeterminate="True" Height="4"/>
+                        <ProgressBar Classes="glowing" IsIndeterminate="False" Maximum="100" Value="100" Height="4" Foreground="#10b981" Background="#e5e7eb"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -126,27 +126,60 @@
                               GridLinesVisibility="Horizontal"
                               BorderThickness="0"
                               MinHeight="300"
-                              MaxHeight="500">
+                              MaxHeight="500"
+                              IsReadOnly="True">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Virtual Path" 
-                                                Binding="{Binding VirtualPath}" 
+                                                Binding="{Binding VirtualPath, Mode=OneWay}" 
                                                 Width="*"/>
-                            <DataGridTextColumn Header="Status" 
-                                                Binding="{Binding StatusDisplay}" 
-                                                Width="150"/>
-                            <DataGridTextColumn Header="Time" 
-                                                Binding="{Binding ReceivedTime, StringFormat='{}{0:HH:mm:ss}'}" 
-                                                Width="120"/>
-                            <DataGridTemplateColumn Header="OneNote Page" Width="100">
+                            <DataGridTemplateColumn Header="Status" Width="240">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate x:DataType="vm:SyncItem">
-                                        <Button Content="Open"
-                                                Command="{ReflectionBinding $parent[UserControl].DataContext.OpenUrlCommand}"
-                                                CommandParameter="{Binding OneNoteUrl}"
-                                                IsVisible="{Binding OneNoteUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Padding="10,5"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="10,0">
+                                            <TextBlock Text="{Binding StatusDisplay}" VerticalAlignment="Center" 
+                                                       IsVisible="{Binding IsNotUploading}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsUploading}">
+                                                <TextBlock Text="{Binding StatusDisplay}" VerticalAlignment="Center" />
+                                                <ProgressBar Classes="glowing"
+                                                             IsIndeterminate="False" 
+                                                             Value="{Binding UploadProgress}"
+                                                             Maximum="{Binding UploadMaxProgress}"
+                                                             Width="80" Height="8" MinWidth="80" MinHeight="8" 
+                                                             VerticalAlignment="Center"
+                                                             CornerRadius="4"
+                                                             Foreground="#16a34a"
+                                                             Background="#e5e7eb" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Time" 
+                                                Binding="{Binding ReceivedTime, StringFormat='{}{0:dd/MM/yyyy HH:mm:ss}', Mode=OneWay}" 
+                                                Width="180"/>
+                            <DataGridTemplateColumn Header="OneNote Page" Width="2*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:SyncItem">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" 
+                                                    IsVisible="{Binding OneNoteUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                            <Button Command="{ReflectionBinding $parent[UserControl].DataContext.CopyUrlCommand}"
+                                                    CommandParameter="{Binding OneNoteUrl}"
+                                                    ToolTip.Tip="Copy Link"
+                                                    Classes="small stroke"
+                                                    Padding="5"
+                                                    CornerRadius="4">
+                                                <PathIcon Data="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" Width="12" Height="12"/>
+                                            </Button>
+                                            <Button Command="{ReflectionBinding $parent[UserControl].DataContext.OpenUrlCommand}"
+                                                    CommandParameter="{Binding OneNoteUrl}"
+                                                    Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Padding="4"
+                                                    Cursor="Hand"
+                                                    ToolTip.Tip="{Binding OneNoteUrl}">
+                                                <TextBlock Text="{Binding OneNoteUrl}" Foreground="#2563eb" TextDecorations="Underline" TextTrimming="CharacterEllipsis" MaxWidth="600" />
+                                            </Button>
+                                        </StackPanel>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>

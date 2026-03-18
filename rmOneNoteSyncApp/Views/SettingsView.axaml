@@ -67,10 +67,10 @@
                     <CheckBox Content="Enable WiFi sync" IsChecked="{Binding EnableWifiSync}"/>
                     
                     <StackPanel Spacing="5">
-                        <TextBlock Text="Sync interval (minutes):" Foreground="#6b7280"/>
-                        <NumericUpDown Value="{Binding SyncIntervalMinutes}" 
-                                      Minimum="5" Maximum="1440" 
-                                      Increment="5"
+                        <TextBlock Text="Sync interval (seconds):" Foreground="#6b7280"/>
+                        <NumericUpDown Value="{Binding SyncIntervalSeconds}" 
+                                      Minimum="10" Maximum="86400" 
+                                      Increment="10"
                                       Width="150"
                                       HorizontalAlignment="Left"/>
                     </StackPanel>

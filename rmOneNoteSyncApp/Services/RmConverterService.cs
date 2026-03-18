@@ -18,7 +18,7 @@ public class RmConverterService : IRmConverterService
         // Default relative to app directory or configurable
         string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "rmOneNoteSyncApp");
         _rmcExecutablePath = Path.Combine(appData, "rmc");
-        
+
         // On Linux, it might not have an extension. On Windows, it would be rmc.exe
         if (OperatingSystem.IsWindows() && !_rmcExecutablePath.EndsWith(".exe"))
         {
@@ -38,9 +38,9 @@ public class RmConverterService : IRmConverterService
             // Create a temporary output directory
             string tempDir = Path.Combine(Path.GetTempPath(), "rm_sync_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
-            
+
             string outputBaseName = Path.Combine(tempDir, Path.GetFileNameWithoutExtension(rmFilePath));
-            
+
             // rmc cli parameters: -t inkml <INPUT> -o <OUTPUT_BASE>
             var startInfo = new ProcessStartInfo
             {
@@ -52,7 +52,7 @@ public class RmConverterService : IRmConverterService
                 CreateNoWindow = true
             };
 
-            _logger.LogInformation("Starting conversion: {Exe} {Args}", _rmcExecutablePath, startInfo.Arguments);
+            _logger.LogDebug("Starting conversion: {Exe} {Args}", _rmcExecutablePath, startInfo.Arguments);
 
             using var process = Process.Start(startInfo);
             if (process == null)
@@ -62,7 +62,7 @@ public class RmConverterService : IRmConverterService
 
             string stdout = await process.StandardOutput.ReadToEndAsync();
             string stderr = await process.StandardError.ReadToEndAsync();
-            
+
             await process.WaitForExitAsync();
 
             if (process.ExitCode != 0)

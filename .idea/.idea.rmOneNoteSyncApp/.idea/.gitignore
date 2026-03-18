@@ -12,7 +12,6 @@
 /dataSources/
 /dataSources.local.xml
 # local stuff
-/.history
 /.vscode
 /rmOneNoteSyncApp/bin
 /rmOneNoteSyncApp/obj

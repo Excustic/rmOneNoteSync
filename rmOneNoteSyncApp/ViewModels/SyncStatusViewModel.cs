@@ -83,9 +83,18 @@ public partial class SyncStatusViewModel : ViewModelBase
         
         // Subscribe to server events
         _syncServer.FileReceived += OnFileReceived;
+        _syncServer.StatusChanged += (sender, running) =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                IsServerRunning = running;
+                ServerStatus = running ? "Server running on port 8080" : "Server stopped";
+            });
+        };
         
         // Subscribe to sync events
         _syncService.SyncProgress += OnSyncProgress;
+        _syncService.PageSyncCompleted += OnPageSyncCompleted;
         _syncService.SyncCompleted += OnSyncCompleted;
         
         // Initialize server state
@@ -95,11 +104,8 @@ public partial class SyncStatusViewModel : ViewModelBase
         // Load initial data
         Task.Run(LoadSyncStatusAsync);
         
-        // Start server if not running
-        if (!_syncServer.IsRunning)
-        {
-            Task.Run(StartServerAsync);
-        }
+        // Load initial data
+        Task.Run(LoadSyncStatusAsync);
     }
     
     private async Task LoadSyncStatusAsync()
@@ -129,14 +135,13 @@ public partial class SyncStatusViewModel : ViewModelBase
             {
                 try 
                 {
-                    SyncItems.Clear();
-                    
-                    // Add recent items
+                    var newItems = new List<SyncItem>();
                     foreach (var page in recentPages)
                     {
-                        var item = MapToSyncItem(page);
-                        SyncItems.Add(item);
+                        newItems.Add(MapToSyncItem(page));
                     }
+                    SyncItems = new ObservableCollection<SyncItem>(newItems);
+                    SortSyncItems();
                     
                     _logger?.LogInformation("Successfully bound {Count} items to UI.", SyncItems.Count);
                 }
@@ -179,7 +184,7 @@ public partial class SyncStatusViewModel : ViewModelBase
             Section = section,
             PageName = pageName,
             FileSize = FormatFileSize(page.FileSizeBytes),
-            ReceivedTime = page.LastModified,
+            ReceivedTime = page.LastModified.ToLocalTime(),
             Status = page.Status,
             LastError = page.LastError,
             OneNoteUrl = page.OneNotePageUrl
@@ -210,12 +215,13 @@ public partial class SyncStatusViewModel : ViewModelBase
                 Section = section,
                 PageName = pageName,
                 FileSize = FormatFileSize(e.FileSize),
-                ReceivedTime = e.ReceivedAt,
+                ReceivedTime = e.ReceivedAt.ToLocalTime(),
                 Status = SyncStatus.Pending
             };
             
-            // Add to beginning of list
-            SyncItems.Insert(0, item);
+            // Add to list and sort
+            SyncItems.Add(item);
+            SortSyncItems();
             
             // Update counters based on the new logic
             TotalReceivedPages++;
@@ -232,6 +238,68 @@ public partial class SyncStatusViewModel : ViewModelBase
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             SyncProgress = e.Message;
+            
+            // Mark items as 'InProgress' based on progress message if applicable
+            if (!string.IsNullOrEmpty(e.CurrentDocumentId) && !string.IsNullOrEmpty(e.CurrentPageId))
+            {
+                foreach (var i in SyncItems)
+                {
+                    if (i.DocumentId == e.CurrentDocumentId && i.PageId == e.CurrentPageId)
+                    {
+                        if (i.Status == SyncStatus.Pending)
+                        {
+                            i.Status = SyncStatus.InProgress;
+                        }
+                        
+                        if (e.TotalSteps > 0)
+                        {
+                            i.UploadMaxProgress = e.TotalSteps;
+                            i.UploadProgress = e.CurrentStep;
+                        }
+                        
+                        i.UpdateStatusDisplay();
+                    }
+                    else if (i.Status == SyncStatus.InProgress)
+                    {
+                        i.Status = SyncStatus.Pending;
+                    }
+                }
+                SortSyncItems();
+            }
+        });
+    }
+
+    private void OnPageSyncCompleted(object? sender, PageSyncCompletedEventArgs e)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            var item = SyncItems.FirstOrDefault(i => i.PageId == e.Page.PageId && i.DocumentId == e.Page.DocumentId);
+            if (item != null)
+            {
+                item.Status = e.Success ? SyncStatus.Uploaded : SyncStatus.Failed;
+                item.LastError = e.ErrorMessage;
+                item.OneNoteUrl = e.OneNoteUrl;
+            }
+            SortSyncItems();
+            
+            // Refresh counts
+            if (e.Success)
+            {
+                TotalPendingPages--;
+                TotalUploadedPages++;
+                
+                // Refresh dashboard to reflect new URL and updated counts
+                var dashboardVm = App.ServiceProvider?.GetService<DashboardViewModel>();
+                if (dashboardVm != null)
+                {
+                    Task.Run(dashboardVm.LoadDashboardDataAsync);
+                }
+            }
+            else
+            {
+                TotalPendingPages--;
+                TotalFailedPages++;
+            }
         });
     }
     
@@ -362,6 +430,29 @@ public partial class SyncStatusViewModel : ViewModelBase
         }
     }
     
+    [RelayCommand]
+    private async Task CopyUrlAsync(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return;
+
+        try
+        {
+            var topLevel = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                ? desktop.MainWindow
+                : null;
+                
+            var clipboard = topLevel?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(url);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to copy URL {Url}", url);
+        }
+    }
+    
     private (string notebook, string section, string page) ParseVirtualPath(string virtualPath)
     {
         var parts = virtualPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
@@ -398,6 +489,21 @@ public partial class SyncStatusViewModel : ViewModelBase
         
         return $"{size:0.##} {sizes[order]}";
     }
+    
+    private void SortSyncItems()
+    {
+        var sorted = SyncItems.OrderBy(i => i.Status switch
+        {
+            SyncStatus.InProgress => 0,
+            SyncStatus.Pending => 1,
+            SyncStatus.Uploaded => 2,
+            SyncStatus.Failed => 3,
+            SyncStatus.Skipped => 4,
+            _ => 5
+        }).ThenByDescending(i => i.ReceivedTime).ToList();
+
+        SyncItems = new ObservableCollection<SyncItem>(sorted);
+    }
 }
 
 public class SyncItem : ObservableObject
@@ -420,11 +526,35 @@ public class SyncItem : ObservableObject
         {
             SetProperty(ref _status, value);
             OnPropertyChanged(nameof(StatusDisplay));
+            OnPropertyChanged(nameof(IsUploading));
+            OnPropertyChanged(nameof(IsNotUploading));
         }
+    }
+    
+    public bool IsUploading => Status == SyncStatus.InProgress;
+    public bool IsNotUploading => Status != SyncStatus.InProgress;
+    
+    private double _uploadProgress;
+    public double UploadProgress
+    {
+        get => _uploadProgress;
+        set => SetProperty(ref _uploadProgress, value);
+    }
+    
+    private double _uploadMaxProgress = 1;
+    public double UploadMaxProgress
+    {
+        get => _uploadMaxProgress;
+        set => SetProperty(ref _uploadMaxProgress, value);
     }
     
     public string? LastError { get; set; }
     public string? OneNoteUrl { get; set; }
+    
+    public void UpdateStatusDisplay()
+    {
+        OnPropertyChanged(nameof(StatusDisplay));
+    }
     
     public string StatusDisplay => Status switch
     {

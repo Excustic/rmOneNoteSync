@@ -16,7 +16,6 @@ public class OneNoteAuthService : IOneNoteAuthService
     private Microsoft.Identity.Client.AuthenticationResult? _authResult;
 
     // Azure AD App Registration details
-    // You need to register your app at https://portal.azure.com
     private const string ClientId = "d88e88e8-1547-4325-a5ae-67e40440cd65";
     private const string TenantId = "consumers"; // Use "common" for multi-tenant
     private readonly string[] _scopes =
@@ -55,7 +54,7 @@ public class OneNoteAuthService : IOneNoteAuthService
     {
         try
         {
-            _logger.LogInformation("Starting interactive sign-in flow");
+            _logger.LogDebug("Starting interactive sign-in flow");
 
             // First try silent authentication
             var accounts = await _msalClient.GetAccountsAsync();
@@ -66,7 +65,7 @@ public class OneNoteAuthService : IOneNoteAuthService
                     _authResult = await _msalClient.AcquireTokenSilent(_scopes, accounts.FirstOrDefault())
                         .ExecuteAsync();
 
-                    _logger.LogInformation("Silent authentication successful for {User}", _authResult.Account.Username);
+                    _logger.LogDebug("Silent authentication successful for {User}", _authResult.Account.Username);
 
                     RaiseAuthenticationStateChanged();
 
@@ -81,7 +80,7 @@ public class OneNoteAuthService : IOneNoteAuthService
                 catch (MsalUiRequiredException)
                 {
                     // Silent auth failed, need interactive
-                    _logger.LogInformation("Silent authentication failed, starting interactive flow");
+                    _logger.LogDebug("Silent authentication failed, starting interactive flow");
                 }
             }
 
@@ -91,7 +90,7 @@ public class OneNoteAuthService : IOneNoteAuthService
                 .WithUseEmbeddedWebView(false) // Use system browser
                 .ExecuteAsync();
 
-            _logger.LogInformation("Interactive authentication successful for {User}", _authResult.Account.Username);
+            _logger.LogDebug("Interactive authentication successful for {User}", _authResult.Account.Username);
 
             RaiseAuthenticationStateChanged();
 
@@ -172,7 +171,7 @@ public class OneNoteAuthService : IOneNoteAuthService
             }
 
             _authResult = null;
-            _logger.LogInformation("User signed out successfully");
+            _logger.LogDebug("User signed out successfully");
 
             RaiseAuthenticationStateChanged();
         }

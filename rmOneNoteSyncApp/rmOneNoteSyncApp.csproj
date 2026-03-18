@@ -6,26 +6,26 @@
         <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-        <Version>0.2.0</Version>
+        <Version>0.3.0</Version>
     </PropertyGroup>
 
     <ItemGroup>
-        <AvaloniaResource Include="Assets\**"/>
+        <AvaloniaResource Include="Assets\**" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Avalonia" Version="11.3.4"/>
+        <PackageReference Include="Avalonia" Version="11.3.4" />
         <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.4" />
-        <PackageReference Include="Avalonia.Desktop" Version="11.3.4"/>
-        <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.4"/>
-        <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.4"/>
+        <PackageReference Include="Avalonia.Desktop" Version="11.3.4" />
+        <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.4" />
+        <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.4" />
         <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
         <PackageReference Include="Avalonia.Diagnostics" Version="11.3.4">
             <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
             <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
         </PackageReference>
         <PackageReference Include="Azure.Identity" Version="1.16.0" />
-        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1"/>
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
         <PackageReference Include="DynamicData" Version="9.4.1" />
         <PackageReference Include="Material.Avalonia" Version="3.13.0" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
@@ -36,6 +36,7 @@
         <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
         <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
         <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+        <PackageReference Include="SharpPcap" Version="6.3.1" />
         <PackageReference Include="SSH.NET" Version="2024.0.0" />
         <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
         <PackageReference Include="Dapper" Version="2.1.35" />

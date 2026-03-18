@@ -1,0 +1,57 @@
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Converters/BoolAndConverter.cs(15,20): warning CS8605: Unboxing a possibly null value. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Converters/BoolAndConverter.cs(15,39): warning CS8605: Unboxing a possibly null value. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Models/SyncConfiguration.cs(19,19): warning CS8618: Non-nullable property 'DevicePassword' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/ViewModels/SettingsViewModel.cs(57,12): warning CS8618: Non-nullable field '_targetNotebook' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the field as nullable. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/ViewModels/SettingsViewModel.cs(124,9): warning CS8602: Dereference of a possibly null reference. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/OneNoteClient.cs(74,68): warning CS1998: This async method lacks 'await' operators and will run synchronously. Consider using the 'await' operator to await non-blocking API calls, or 'await Task.Run(...)' to do CPU-bound work on a background thread. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/ViewModels/LogViewModel.cs(253,13): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/ViewModels/LogViewModel.cs(264,13): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/Platform/DeviceDetectionServiceBase.cs(35,31): warning CS1998: This async method lacks 'await' operators and will run synchronously. Consider using the 'await' operator to await non-blocking API calls, or 'await Task.Run(...)' to do CPU-bound work on a background thread. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/Platform/DeviceDetectionServiceBase.cs(51,31): warning CS1998: This async method lacks 'await' operators and will run synchronously. Consider using the 'await' operator to await non-blocking API calls, or 'await Task.Run(...)' to do CPU-bound work on a background thread. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/SyncServerService.cs(46,23): warning CS1998: This async method lacks 'await' operators and will run synchronously. Consider using the 'await' operator to await non-blocking API calls, or 'await Task.Run(...)' to do CPU-bound work on a background thread. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/SqliteDatabaseService.cs(349,15): warning CS8604: Possible null reference argument for parameter 'cnn' in 'Task<int> SqlMapper.ExecuteAsync(IDbConnection cnn, string sql, object? param = null, IDbTransaction? transaction = null, int? commandTimeout = null, CommandType? commandType = null)'. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/SqliteDatabaseService.cs(357,15): warning CS8604: Possible null reference argument for parameter 'cnn' in 'Task<int> SqlMapper.ExecuteAsync(IDbConnection cnn, string sql, object? param = null, IDbTransaction? transaction = null, int? commandTimeout = null, CommandType? commandType = null)'. [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/SyncService.cs(20,29): warning CS0649: Field 'SyncService._autoSyncTimer' is never assigned to, and will always have its default value null [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/Platform/WindowsDeviceDetectionService.cs(74,21): warning CA1416: This call site is reachable on all platforms. 'ManagementEventWatcher.Stop()' is only supported on: 'windows'. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1416) [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/Platform/WindowsDeviceDetectionService.cs(56,13): warning CA1416: This call site is reachable on all platforms. 'ManagementEventWatcher.EventArrived' is only supported on: 'windows'. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1416) [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/Platform/WindowsDeviceDetectionService.cs(52,25): warning CA1416: This call site is reachable on all platforms. 'WqlEventQuery' is only supported on: 'windows'. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1416) [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/Platform/WindowsDeviceDetectionService.cs(63,13): warning CA1416: This call site is reachable on all platforms. 'ManagementEventWatcher.Start()' is only supported on: 'windows'. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1416) [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/Platform/WindowsDeviceDetectionService.cs(55,27): warning CA1416: This call site is reachable on all platforms. 'ManagementEventWatcher' is only supported on: 'windows'. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1416) [/home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj]
+[21:26:26 INF] Database initialized at /home/excustic/.local/share/rmOneNoteSyncApp/sync.db
+[21:26:27 INF] Started device monitoring
+[21:26:27 INF] Started Linux network interface monitoring
+[21:26:28 INF] Reconnecting SSH using IP: 10.11.99.1, Password: kTgWdqIBVB
+[21:26:28 INF] Attempting SSH connection to 10.11.99.1
+[21:26:28 INF] SSH connection closed
+[21:26:28 INF] SSH connection established successfully
+[21:26:28 INF] DetectionServiceConnected: True, SSHConnected: True
+[21:26:28 ERR] Failed to start HTTP server. May need admin privileges or port 8080 is in use
+System.Net.HttpListenerException (98): Address already in use
+   at System.Net.HttpEndPointManager.GetEPListener(String host, Int32 port, HttpListener listener, Boolean secure)
+   at System.Net.HttpEndPointManager.AddPrefixInternal(String p, HttpListener listener)
+   at System.Net.HttpEndPointManager.AddListener(HttpListener listener)
+   at System.Net.HttpListener.Start()
+   at rmOneNoteSyncApp.Services.SyncServerService.StartAsync(Int32 port) in /home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/SyncServerService.cs:line 60
+Unhandled exception. System.Net.HttpListenerException (98): Address already in use
+   at System.Net.HttpEndPointManager.GetEPListener(String host, Int32 port, HttpListener listener, Boolean secure)
+   at System.Net.HttpEndPointManager.AddPrefixInternal(String p, HttpListener listener)
+   at System.Net.HttpEndPointManager.AddListener(HttpListener listener)
+   at System.Net.HttpListener.Start()
+   at rmOneNoteSyncApp.Services.SyncServerService.StartAsync(Int32 port) in /home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Services/SyncServerService.cs:line 60
+   at rmOneNoteSyncApp.ViewModels.DashboardViewModel.LoadDashboardDataAsync() in /home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/ViewModels/DashboardViewModel.cs:line 169
+   at rmOneNoteSyncApp.ViewModels.DashboardViewModel.<.ctor>b__18_0(Object sender, Boolean b) in /home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/ViewModels/DashboardViewModel.cs:line 67
+   at System.Threading.Tasks.Task.<>c.<ThrowAsync>b__128_0(Object state)
+   at Avalonia.Threading.SendOrPostCallbackDispatcherOperation.InvokeCore()
+   at Avalonia.Threading.DispatcherOperation.Execute()
+   at Avalonia.Threading.Dispatcher.ExecuteJob(DispatcherOperation job)
+   at Avalonia.Threading.Dispatcher.ExecuteJobsCore(Boolean fromExplicitBackgroundProcessingCallback)
+   at Avalonia.Threading.Dispatcher.Signaled()
+   at Avalonia.X11.X11PlatformThreading.CheckSignaled()
+   at Avalonia.X11.X11PlatformThreading.RunLoop(CancellationToken cancellationToken)
+   at Avalonia.Threading.DispatcherFrame.Run(IControlledDispatcherImpl impl)
+   at Avalonia.Threading.Dispatcher.PushFrame(DispatcherFrame frame)
+   at Avalonia.Threading.Dispatcher.MainLoop(CancellationToken cancellationToken)
+   at Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime.StartCore(String[] args)
+   at Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime.Start(String[] args)
+   at Avalonia.ClassicDesktopStyleApplicationLifetimeExtensions.StartWithClassicDesktopLifetime(AppBuilder builder, String[] args, Action`1 lifetimeBuilder)
+   at rmOneNoteSyncApp.Program.Main(String[] args) in /home/excustic/RiderProjects/rmOneNoteSyncApp/rmOneNoteSyncApp/Program.cs:line 96

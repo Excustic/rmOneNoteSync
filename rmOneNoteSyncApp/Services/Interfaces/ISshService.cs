@@ -15,6 +15,11 @@ public interface ISshService : IDisposable
     bool IsConnected { get; }
     
     /// <summary>
+    /// The IP address of the current connection
+    /// </summary>
+    string? CurrentIp { get; }
+    
+    /// <summary>
     /// Establish SSH connection to the device
     /// </summary>
     /// <param name="host">IP address or hostname</param>
@@ -71,4 +76,10 @@ public interface ISshService : IDisposable
     /// Notifies whether a SSH connection was created/severed.
     /// </summary>
     event EventHandler<bool>? OnConnectionChanged;
+
+    /// <summary>
+    /// Updates the SERVER_URL_FALLBACK in /home/root/onenote-sync/http.conf
+    /// </summary>
+    /// <param name="ip">The host IP to inject</param>
+    Task UpdateServerUrlFallbackAsync(string ip);
 }

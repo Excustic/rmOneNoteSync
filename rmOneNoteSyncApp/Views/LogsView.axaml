@@ -49,7 +49,8 @@
                     
                     <ScrollViewer>
                         <ListBox ItemsSource="{Binding LogFiles}"
-                                 SelectedItem="{Binding SelectedLogFile}">
+                                 SelectedItem="{Binding SelectedLogFile}"
+                                 >
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Border Padding="5">
@@ -86,7 +87,8 @@
                             BorderThickness="0,0,0,1">
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Grid.Column="0" 
-                                       Text="{Binding SelectedLogFile.DisplayName, FallbackValue='Select a log file'}"
+                                       DataContext="{Binding SelectedLogFile}"
+                                       Text="{Binding DisplayName, TargetNullValue='Select a log file', FallbackValue='Select a log file'}"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center"/>
                             

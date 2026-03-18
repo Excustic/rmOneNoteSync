@@ -23,6 +23,7 @@ public class SyncServerService : ISyncServerService
     private readonly string _uploadDirectory;
 
     public bool IsRunning => _listener?.IsListening ?? false;
+    public event EventHandler<bool>? StatusChanged;
     public event EventHandler<FileReceivedEventArgs>? FileReceived;
 
     public SyncServerService(
@@ -62,7 +63,8 @@ public class SyncServerService : ISyncServerService
             _cancellationTokenSource = new CancellationTokenSource();
             _serverTask = Task.Run(() => ServerLoop(_cancellationTokenSource.Token));
 
-            _logger.LogInformation("Sync server started on port {Port}", port);
+            _logger.LogCritical("Sync server started on port {Port}", port);
+            StatusChanged?.Invoke(this, true);
         }
         catch (HttpListenerException ex)
         {
@@ -76,7 +78,7 @@ public class SyncServerService : ISyncServerService
         if (!IsRunning)
             return;
 
-        _logger.LogInformation("Stopping sync server");
+        _logger.LogDebug("Stopping sync server");
 
         _cancellationTokenSource?.Cancel();
         _listener?.Stop();
@@ -89,7 +91,8 @@ public class SyncServerService : ISyncServerService
         _listener?.Close();
         _listener = null;
 
-        _logger.LogInformation("Sync server stopped");
+        _logger.LogCritical("Sync server stopped");
+        StatusChanged?.Invoke(this, false);
     }
 
     private async Task ServerLoop(CancellationToken cancellationToken)
@@ -138,7 +141,7 @@ public class SyncServerService : ISyncServerService
             var request = context.Request;
             var response = context.Response;
 
-            _logger.LogInformation("Received {Method} request to {Path}",
+            _logger.LogDebug("Received {Method} request to {Path}",
                 request.HttpMethod, request.Url?.AbsolutePath);
 
             // Route the request
@@ -185,13 +188,13 @@ public class SyncServerService : ISyncServerService
         var deviceId = request.QueryString["device_id"] ?? "unknown";
         var userAgent = request.UserAgent;
 
-        _logger.LogInformation("Config request from device: {DeviceId} using {UserAgent}", deviceId, userAgent ?? "Unknown");
+        _logger.LogDebug("Config request from device: {DeviceId} using {UserAgent}", deviceId, userAgent ?? "Unknown");
 
-        if (string.IsNullOrEmpty(userAgent) || !userAgent.Contains("RemarkableSyncClient/1.1"))
+        if (string.IsNullOrEmpty(userAgent) || !userAgent.Contains("RemarkableSyncClient/1.2"))
         {
             _logger.LogWarning("Rejecting config request from incompatible client: {UserAgent}", userAgent ?? "Unknown");
             response.StatusCode = 426; // Upgrade Required
-            await WriteJsonResponse(response, new { error = "Client protocol mismatch. Expected RemarkableSyncClient/1.1, please update your reMarkable client." });
+            await WriteJsonResponse(response, new { error = "Client protocol mismatch. Expected RemarkableSyncClient/1.2, please update your reMarkable client." });
             return;
         }
 
@@ -222,11 +225,11 @@ public class SyncServerService : ISyncServerService
         var userAgent = request.UserAgent;
 
         // Validate Protocol Version
-        if (string.IsNullOrEmpty(userAgent) || !userAgent.Contains("RemarkableSyncClient/1.1"))
+        if (string.IsNullOrEmpty(userAgent) || !userAgent.Contains("RemarkableSyncClient/1.2"))
         {
             _logger.LogWarning("Rejecting upload from incompatible client: {UserAgent}", userAgent ?? "Unknown");
             response.StatusCode = 426; // Upgrade Required
-            await WriteJsonResponse(response, new { error = "Client protocol mismatch. Expected RemarkableSyncClient/1.1, please update your reMarkable client." });
+            await WriteJsonResponse(response, new { error = "Client protocol mismatch. Expected RemarkableSyncClient/1.2, please update your reMarkable client." });
             return;
         }
 
@@ -260,7 +263,7 @@ public class SyncServerService : ISyncServerService
 
         if (!isWhiteListed)
         {
-            _logger.LogInformation("Dropping unwhitelisted file transmission: {Path}", documentPath);
+            _logger.LogDebug("Dropping unwhitelisted file transmission: {Path}", documentPath);
             response.StatusCode = 200;
             await WriteJsonResponse(response, new
             {
@@ -302,13 +305,13 @@ public class SyncServerService : ISyncServerService
 
         var fileInfo = new FileInfo(localPath);
 
-        _logger.LogInformation("Saved file: {Path} ({Size} bytes)", localPath, fileInfo.Length);
+        _logger.LogDebug("Saved file: {Path} ({Size} bytes)", localPath, fileInfo.Length);
 
         // Save to database
 
         // Ensure the Document exists before inserting the Page to respect SQLite Foreign Key constraints
         var existingDoc = await _databaseService.GetDocumentMetadataAsync(documentId);
-        if (existingDoc == null)
+        if (existingDoc == null || string.IsNullOrEmpty(existingDoc.DocumentId))
         {
             await _databaseService.SaveDocumentMetadataAsync(new DocumentMetadata
             {
@@ -318,6 +321,11 @@ public class SyncServerService : ISyncServerService
                 Parent = "",
                 LastModified = DateTime.UtcNow
             });
+        }
+        else
+        {
+            existingDoc.LastModified = DateTime.UtcNow;
+            await _databaseService.SaveDocumentMetadataAsync(existingDoc);
         }
 
         var metadata = new PageMetadata

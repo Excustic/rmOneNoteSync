@@ -16,9 +16,11 @@ public partial class MainViewModel : ViewModelBase
     private readonly ISshService _sshService;
     private readonly IDeploymentService _deploymentService;
     private readonly IDatabaseService _databaseService;
-    private readonly ISyncServerService _syncServer;
+    private readonly ISyncService _syncService;
     private readonly ILogger<MainViewModel> _logger;
+    private readonly IOneNoteAuthService _oneNoteAuth;
     private SyncConfiguration? _configuration;
+    private string _fetchedMacAddress = string.Empty;
 
     [ObservableProperty]
     private ConnectionState _connectionState = ConnectionState.Disconnected;
@@ -74,14 +76,14 @@ public partial class MainViewModel : ViewModelBase
         IDeploymentService deploymentService,
         IDatabaseService databaseService,
         IOneNoteAuthService oneNoteAuth,
-        ISyncServerService syncServer,
+        ISyncService syncService,
         ILogger<MainViewModel> logger)
     {
         _detectionService = detectionService;
         _sshService = sshService;
         _deploymentService = deploymentService;
         _databaseService = databaseService;
-        _syncServer = syncServer;
+        _syncService = syncService;
         _logger = logger;
 
         // Initialize with Dashboard view model
@@ -120,15 +122,21 @@ public partial class MainViewModel : ViewModelBase
         Task.Run(async () =>
         {
             var config = await _databaseService.GetConfigurationAsync();
-            ShowSetupScreen = config is null or { DevicePassword: "", DeviceIp: "" };
+            ShowSetupScreen = config is null or { DevicePassword: "" };
 
             if (!ShowSetupScreen)
             {
+                if (config != null && config.AutoSync)
+                {
+                    _logger.LogDebug("Initializing Automatic Sync (Interval: {Interval}s)", config.SyncIntervalSeconds);
+                    _ = _syncService.StartAutomaticSyncAsync(config.SyncIntervalSeconds);
+                }
+
                 // Make sure we're on the main thread for UI updates
                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     CurrentView = "Dashboard";
-                    CurrentViewModel = new DashboardViewModel(_databaseService, _sshService, _syncServer);
+                    CurrentViewModel = App.ServiceProvider?.GetRequiredService<DashboardViewModel>();
                 });
             }
         });
@@ -157,25 +165,55 @@ public partial class MainViewModel : ViewModelBase
     {
         _configuration = await _databaseService.GetConfigurationAsync();
 
-        if (_detectionService.IsConnected)
+        if (_detectionService.IsConnected && _detectionService.CurrentDevice != null)
         {
-            var d = _detectionService.CurrentDevice;
-            if (!_sshService.IsConnected)
+            var device = _detectionService.CurrentDevice;
+            if (!_sshService.IsConnected || _sshService.CurrentIp != device.IpAddress)
             {
-                _logger?.LogInformation("Reconnecting SSH using IP: {IP}, Password: {PASS}",
-                    _configuration?.DeviceIp ?? string.Empty, _configuration?.DevicePassword ?? string.Empty);
-                await _sshService.ConnectAsync(_configuration?.DeviceIp ?? string.Empty,
-                    _configuration?.DevicePassword ?? string.Empty);
+                _logger?.LogInformation("Connecting SSH to {IP} via {Type}", device.IpAddress, device.ConnectionType);
+
+                var connected = await _sshService.ConnectAsync(device.IpAddress, _configuration?.DevicePassword ?? string.Empty);
+                if (connected)
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        DeviceStatusText = $"Connected via {device.ConnectionType} at {device.IpAddress}";
+                        ConnectionStateText = $"{device.ConnectionType} Connected";
+                        ConnectionState = ConnectionState.Configured;
+                        IsConnected = true;
+                    });
+
+                    // If connected via WiFi, inject the host IP into the device
+                    if (device.ConnectionType == DeviceConnectionType.WiFi)
+                    {
+                        var localIp = await _detectionService.GetLocalIpAddressForDevice(device.IpAddress);
+                        if (!string.IsNullOrEmpty(localIp))
+                        {
+                            _logger?.LogInformation("Injecting local IP {LocalIP} as fallback to device", localIp);
+                            await _sshService.UpdateServerUrlFallbackAsync(localIp);
+                        }
+                    }
+                }
             }
         }
         else
         {
-            await _sshService.DisconnectAsync();
-        }
+            if (_sshService.IsConnected)
+            {
+                await _sshService.DisconnectAsync();
+            }
 
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                ConnectionStateText = "Disconnected";
+                DeviceStatusText = "No device connected";
+                IsConnected = false;
+            });
+        }
         _logger?.LogInformation("DetectionServiceConnected: {DET}, SSHConnected: {SSH}",
             _detectionService.IsConnected, _sshService.IsConnected);
     }
+
 
     partial void OnDevicePasswordChanged(string value)
     {
@@ -194,7 +232,7 @@ public partial class MainViewModel : ViewModelBase
             if (e is { IsConnected: true, Device: not null })
             {
                 DeviceStatusText = $"Device detected at {e.Device.IpAddress}";
-                ConnectionStateText = "USB Connected";
+                ConnectionStateText = $"{e.Device.ConnectionType} Connected";
                 ConnectionState = ConnectionState.Configured;
             }
             else
@@ -231,6 +269,21 @@ public partial class MainViewModel : ViewModelBase
 
                 // Enable Wi-Fi
                 await _sshService.EnableWifiOverSshAsync();
+
+                // Fetch MAC address
+                try
+                {
+                    var macAddressOutput = await _sshService.ExecuteCommandAsync("cat /sys/class/net/wlan0/address");
+                    if (!string.IsNullOrWhiteSpace(macAddressOutput))
+                    {
+                        _fetchedMacAddress = macAddressOutput.Trim();
+                        _logger.LogDebug("Fetched WLAN MAC Address: {MAC}", _fetchedMacAddress);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to fetch device MAC address");
+                }
 
                 // Deploy services if needed
                 var installStatus = await _deploymentService.CheckInstallationAsync(_sshService);
@@ -277,7 +330,7 @@ public partial class MainViewModel : ViewModelBase
             {
                 IsOneNoteConfigured = true;
                 OneNoteStatusText = $"Signed in as {result.UserName}";
-                _logger.LogInformation("Successfully authenticated with OneNote as {User}", result.UserName);
+                _logger.LogDebug("Successfully authenticated with OneNote as {User}", result.UserName);
             }
             else
             {
@@ -309,12 +362,13 @@ public partial class MainViewModel : ViewModelBase
         {
             DeviceIp = CurrentDevice?.IpAddress ?? "10.11.99.1",
             DevicePassword = this.DevicePassword,
+            DeviceMacAddress = _fetchedMacAddress,
             EnableWifiSync = true,
             AutoSync = true
         };
 
         await _databaseService.SaveConfigurationAsync(config);
-        
+
         // Wait briefly to allow services to transition state
         await Task.Delay(500);
 
@@ -347,6 +401,4 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(CurrentView));
     }
 
-    // In MainViewModel constructor, add:
-    private readonly IOneNoteAuthService _oneNoteAuth;
 }

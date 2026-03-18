@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -22,6 +23,7 @@ public class SyncService : ISyncService
     private CancellationTokenSource? _autoSyncCancellation;
 
     public event EventHandler<SyncProgressEventArgs>? SyncProgress;
+    public event EventHandler<PageSyncCompletedEventArgs>? PageSyncCompleted;
     public event EventHandler<SyncCompletedEventArgs>? SyncCompleted;
 
     public bool IsSyncing => _isSyncing;
@@ -71,7 +73,7 @@ public class SyncService : ISyncService
 
             if (!pendingPages.Any())
             {
-                _logger.LogInformation("No pending items to sync");
+                _logger.LogDebug("No pending items to sync");
                 result.Success = true;
                 return result;
             }
@@ -99,7 +101,7 @@ public class SyncService : ISyncService
 
                 try
                 {
-                    ReportProgress($"Syncing {page.VirtualPath}...", pendingPages.Count, processed);
+                    ReportProgress($"Converting notes...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 1, 8);
 
                     if (!File.Exists(page.LocalFilePath))
                     {
@@ -115,8 +117,11 @@ public class SyncService : ISyncService
 
                     // 2. Parse Virtual Path to create Graph nodes
                     var (notebook, section, pageName) = ParseVirtualPath(page.VirtualPath);
+                    if (section.Length > 49) section = section.Substring(0, 49);
 
                     // Ensure notebook exists
+                    ReportProgress($"Fetching Notebook...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 2, 8);
+
                     var notebooks = await _oneNoteClient.GetNotebooksAsync();
                     var targetNotebook = notebooks.FirstOrDefault(n => n.DisplayName == notebook);
                     if (targetNotebook == null)
@@ -125,6 +130,7 @@ public class SyncService : ISyncService
                     }
 
                     // Ensure section exists
+                    ReportProgress($"Fetching Section...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 3, 8);
                     var sections = await _oneNoteClient.GetSectionsAsync(targetNotebook.Id!);
                     var targetSection = sections.FirstOrDefault(s => s.DisplayName == section);
                     if (targetSection == null)
@@ -132,15 +138,32 @@ public class SyncService : ISyncService
                         targetSection = await _oneNoteClient.CreateSectionAsync(targetNotebook.Id!, section);
                     }
 
+                    // Save the Notebook link back to DocumentMetadata CustomMetadata
+                    var docMeta = await _databaseService.GetDocumentMetadataAsync(page.DocumentId);
+                    if (docMeta != null)
+                    {
+                        var notebookLink = targetNotebook.Links?.OneNoteWebUrl?.Href ?? targetNotebook.Links?.OneNoteClientUrl?.Href;
+                        if (!string.IsNullOrEmpty(notebookLink) &&
+                            (!docMeta.CustomMetadata.ContainsKey("OneNoteUrl") || docMeta.CustomMetadata["OneNoteUrl"]?.ToString() != notebookLink))
+                        {
+                            docMeta.CustomMetadata["OneNoteUrl"] = notebookLink;
+                            await _databaseService.SaveDocumentMetadataAsync(docMeta);
+                        }
+                    }
+
                     // Check for existing page with same title to prevent duplication
+                    ReportProgress($"Checking records...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 4, 8);
+
                     var existingPages = await _oneNoteClient.GetPagesAsync(targetSection.Id!);
                     var existingPage = existingPages.FirstOrDefault(p => p.Title == pageName);
                     if (existingPage != null)
                     {
-                        _logger.LogInformation("Deleting existing OneNote page {Page} before upload to prevent duplication", pageName);
+                        ReportProgress($"Overwriting duplicate...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 5, 8);
+                        _logger.LogDebug("Deleting existing OneNote page {Page} before upload to prevent duplication", pageName);
                         await _oneNoteClient.DeletePageAsync(existingPage.Id!);
                     }
 
+                    ReportProgress($"Preparing payload...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 6, 8);
                     // 3. Read transcoded files
                     byte[] inkmlData = await File.ReadAllBytesAsync(convResult.InkMLPath, cancellationToken);
                     byte[] htmlData = await File.ReadAllBytesAsync(convResult.HtmlPath, cancellationToken);
@@ -154,20 +177,50 @@ public class SyncService : ISyncService
                     };
 
                     // 4. Upload Multipart payload
-                    await _oneNoteClient.UploadInkMLPageAsync(
+                    ReportProgress($"Uploading page...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 7, 8);
+                    var pageId = await _oneNoteClient.UploadInkMLPageAsync(
                         targetSection.Id!,
                         pageName,
                         inkmlData,
                         htmlData,
                         metadata);
 
+                    ReportProgress($"Completing sync...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 8, 8);
+                    string? oneNoteUrl = null;
+                    try
+                    {
+                        var createdPage = await _oneNoteClient.GetPageAsync(pageId);
+                        oneNoteUrl = createdPage?.Links?.OneNoteWebUrl?.Href ?? createdPage?.Links?.OneNoteClientUrl?.Href;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to retrieve OneNote URL for uploaded page {PageId}", pageId);
+                    }
+
                     await _databaseService.UpdatePageStatusAsync(
                         page.DocumentId,
                         page.PageId,
-                        SyncStatus.Uploaded);
+                        SyncStatus.Uploaded,
+                        null,
+                        oneNoteUrl);
+
+                    // Update timestamp so recent files jump to top and dashboard lastUpdated is refreshed
+                    var currentDoc = await _databaseService.GetDocumentMetadataAsync(page.DocumentId);
+                    if (currentDoc != null)
+                    {
+                        currentDoc.LastModified = DateTime.UtcNow;
+                        await _databaseService.SaveDocumentMetadataAsync(currentDoc);
+                    }
+
+                    var currentPage = await _databaseService.GetPageMetadataAsync(page.DocumentId, page.PageId);
+                    if (currentPage != null)
+                    {
+                        currentPage.LastModified = DateTime.UtcNow;
+                        await _databaseService.SavePageMetadataAsync(currentPage);
+                    }
 
                     result.SuccessfulDocuments++;
-                    _logger.LogInformation("Successfully transcoded and uploaded {Path} to OneNote", page.VirtualPath);
+                    _logger.LogDebug("Successfully transcoded and uploaded {Path} to OneNote", page.VirtualPath);
                 }
                 catch (Exception ex)
                 {
@@ -230,7 +283,7 @@ public class SyncService : ISyncService
         return result;
     }
 
-    public async Task StartAutomaticSyncAsync(int intervalMinutes)
+    public async Task StartAutomaticSyncAsync(int intervalSeconds)
     {
         _autoSyncCancellation = new CancellationTokenSource();
 
@@ -238,14 +291,22 @@ public class SyncService : ISyncService
         {
             try
             {
-                await SyncAllAsync(_autoSyncCancellation.Token);
+                if (_isSyncing)
+                {
+                    _logger.LogDebug("Skipping automatic sync as another sync is already in progress.");
+                }
+                else
+                {
+                    _logger.LogDebug("Automatic Sync Interval Triggered (Every {Interval}s)", intervalSeconds);
+                    await SyncAllAsync(_autoSyncCancellation.Token);
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Auto-sync failed");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(intervalMinutes), _autoSyncCancellation.Token);
+            await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), _autoSyncCancellation.Token);
         }
     }
 
@@ -259,13 +320,18 @@ public class SyncService : ISyncService
         }
     }
 
-    private void ReportProgress(string message, int total, int processed)
+    private void ReportProgress(string message, int total, int processed, string? currentItem = null, string? docId = null, string? pageId = null, int currentStep = 0, int totalSteps = 0)
     {
         SyncProgress?.Invoke(this, new SyncProgressEventArgs
         {
             Message = message,
             TotalItems = total,
-            ProcessedItems = processed
+            ProcessedItems = processed,
+            CurrentItem = currentItem,
+            CurrentDocumentId = docId,
+            CurrentPageId = pageId,
+            CurrentStep = currentStep,
+            TotalSteps = totalSteps
         });
     }
 
@@ -281,7 +347,25 @@ public class SyncService : ISyncService
         });
     }
 
-    private (string notebook, string section, string page) ParseVirtualPath(string virtualPath)
+    private static string SanitizeOneNoteName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return "Untitled";
+
+        // Replace known invalid characters with underscore: ? * \ / : < > | & # " ' % ~
+        var sanitized = Regex.Replace(name, @"[?*\\/:<>|&#""'%~]", "_");
+
+        // Remove control characters (which can hide as bad chars) and trim
+        sanitized = new string([.. sanitized.Where(c => !char.IsControl(c))]).Trim();
+
+        if (string.IsNullOrEmpty(sanitized)) return "Untitled";
+
+        // OneNote limits section names to 50 chars
+        if (sanitized.Length > 49) sanitized = sanitized[..49].TrimEnd();
+
+        return sanitized;
+    }
+
+    private static (string notebook, string section, string page) ParseVirtualPath(string virtualPath)
     {
         var parts = virtualPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
@@ -291,14 +375,26 @@ public class SyncService : ISyncService
         if (parts.Length == 1)
             return ("rm_Uncategorized", "Default", parts[0]);
 
+        string notebook;
+        string section;
+        string page;
+
         if (parts.Length == 2)
-            return ($"rm_{parts[0]}", parts[0], parts[1]);
+        {
+            notebook = "rm_" + parts[0];
+            section = parts[0];
+            page = parts[1];
+        }
+        else
+        {
+            var notebookParts = parts.Take(parts.Length - 2);
+            notebook = "rm_" + string.Join("_", notebookParts);
+            section = parts[^2];
+            page = parts[^1];
+        }
 
-        var notebookParts = parts.Take(parts.Length - 2).ToList();
-        var section = parts[parts.Length - 2];
-        var page = parts[parts.Length - 1];
-
-        var notebook = "rm_" + string.Join("_", notebookParts);
+        notebook = SanitizeOneNoteName(notebook);
+        section = SanitizeOneNoteName(section);
 
         return (notebook, section, page);
     }

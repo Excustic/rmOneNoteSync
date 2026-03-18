@@ -11,32 +11,36 @@ namespace rmOneNoteSyncApp.Services.Interfaces;
 public interface IDatabaseService : IDisposable
 {
     Task InitializeAsync(string databasePath);
-    
+    void Initialize(string databasePath);
     // Configuration management
     Task<SyncConfiguration?> GetConfigurationAsync();
     Task SaveConfigurationAsync(SyncConfiguration config);
-    
+
     // Page metadata management
     Task<PageMetadata?> GetPageMetadataAsync(string documentId, string pageId);
     Task<List<PageMetadata>> GetPendingPagesAsync(int limit = 100);
     Task<List<PageMetadata>> GetRecentPagesAsync(int limit = 100);
     Task<List<PageMetadata>> GetPagesByStatusAsync(SyncStatus status);
     Task SavePageMetadataAsync(PageMetadata metadata);
-    Task UpdatePageStatusAsync(string documentId, string pageId, SyncStatus status, string? error = null);
-    
+    Task UpdatePageStatusAsync(string documentId, string pageId, SyncStatus status, string? error = null, string? oneNoteUrl = null);
+
     // Document metadata management
     Task<DocumentMetadata?> GetDocumentMetadataAsync(string documentId);
     Task<List<DocumentMetadata>> GetAllDocumentsAsync();
     Task SaveDocumentMetadataAsync(DocumentMetadata metadata);
-    
+
     // Cache management
     Task<long> GetCacheSizeAsync();
     Task<int> CleanupOldCacheAsync(int daysToKeep);
     Task ClearCacheAsync();
-    
+
     // Sync history
     Task RecordSyncEventAsync(string documentId, string pageId, bool success, string? details = null);
     Task<List<SyncEvent>> GetSyncHistoryAsync(int limit = 100);
+
+    // Telemetry and generic state
+    Task<string?> GetTelemetryAsync(string key);
+    Task SaveTelemetryAsync(string key, string value);
 }
 
 public class SyncEvent

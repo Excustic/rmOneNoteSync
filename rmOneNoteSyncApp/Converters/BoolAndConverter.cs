@@ -6,13 +6,13 @@ using Avalonia.Data.Converters;
 
 namespace rmOneNoteSyncApp.Converters;
 
-public class BoolAndConverter: IMultiValueConverter
+public class BoolAndConverter : IMultiValueConverter
 {
     public object? Convert(IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
     {
         if (values.Count == 2 && values.All(v => v is bool))
         {
-            return (bool)values[0] && (bool)values[1];
+            return (bool)(values[0] ?? false) && (bool)(values[1] ?? false);
         }
 
         return false;

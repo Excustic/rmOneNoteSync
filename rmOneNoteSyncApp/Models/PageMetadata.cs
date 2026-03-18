@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace rmOneNoteSyncApp.Models;
 
@@ -55,4 +56,27 @@ public class DocumentMetadata
     public DateTime LastModified { get; set; }
     public List<PageMetadata> Pages { get; set; } = new();
     public Dictionary<string, object> CustomMetadata { get; set; } = new();
+    public string? OneNoteUrl => CustomMetadata.TryGetValue("OneNoteUrl", out var url) ? url?.ToString() : null;
+    
+    public string NotebookName
+    {
+        get
+        {
+            var virtualPath = Pages.FirstOrDefault()?.VirtualPath;
+            if (string.IsNullOrEmpty(virtualPath)) return VisibleName;
+            
+            var parts = virtualPath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length <= 1) return "rm_Uncategorized";
+            if (parts.Length == 2) return $"rm_{SanitizeName(parts[0])}";
+            
+            var notebookParts = parts.Take(parts.Length - 2).ToList();
+            return "rm_" + string.Join("_", notebookParts.Select(SanitizeName));
+        }
+    }
+    
+    private string SanitizeName(string name)
+    {
+        return name.Replace("/", "_").Replace("\\", "_").Replace(":", "_").Replace("*", "_")
+                   .Replace("?", "_").Replace("\"", "_").Replace("<", "_").Replace(">", "_").Replace("|", "_");
+    }
 }

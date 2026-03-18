@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Net.Mime;
-using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -10,7 +8,6 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using rmOneNoteSyncApp.Models;
-using rmOneNoteSyncApp.Services;
 using rmOneNoteSyncApp.Services.Interfaces;
 
 namespace rmOneNoteSyncApp.ViewModels;
@@ -19,53 +16,54 @@ public partial class SettingsViewModel : ViewModelBase
 {
     private readonly IDatabaseService _databaseService;
     private readonly ISshService _sshService;
+    private readonly ISyncService _syncService;
+    private readonly IConfigurationProviderService _configProvider;
     private readonly ILogger<SettingsViewModel>? _logger;
     private SyncConfiguration? _configuration;
-    
+
     [ObservableProperty]
     private bool _enableWifiSync;
-    
+
     [ObservableProperty]
-    private int _syncIntervalMinutes;
-    
+    private int _syncIntervalSeconds;
+
     [ObservableProperty]
     private bool _autoSync;
-    
-    [ObservableProperty]
-    private string _targetNotebook;
-    
+
     [ObservableProperty]
     private long _maxCacheSizeMB;
-    
+
     [ObservableProperty]
     private int _cacheRetentionDays;
-    
+
     [ObservableProperty]
     private bool _keepLocalCopies;
-    
+
     [ObservableProperty]
     private bool _isDeviceConnected;
-    
-     [ObservableProperty]
+
+    [ObservableProperty]
     private bool _isRestartingService;
-    
+
     [ObservableProperty]
     private string _serviceStatus = "Unknown";
-    
+
     [ObservableProperty]
     private string _deviceInfo = "No device connected";
-    
-    public SettingsViewModel(IDatabaseService databaseService, ISshService sshService)
+
+    public SettingsViewModel(IDatabaseService databaseService, ISshService sshService, ISyncService syncService, IConfigurationProviderService configProvider)
     {
         _databaseService = databaseService;
         _sshService = sshService;
-        
+        _syncService = syncService;
+        _configProvider = configProvider;
+
         try
         {
             _logger = App.ServiceProvider?.GetService<ILogger<SettingsViewModel>>();
         }
         catch { }
-        
+
         _sshService.OnConnectionChanged += SshServiceOnConnectionChanged;
         SshServiceOnConnectionChanged(this, _sshService.IsConnected);
         // Load configuration
@@ -78,10 +76,10 @@ public partial class SettingsViewModel : ViewModelBase
         {
             if (e)
             {
-                Task.Run(async() =>
+                Task.Run(async () =>
                 {
                     var info = await _sshService.GetDeviceInfoAsync();
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() => 
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
                         DeviceInfo = $"Connected to {info.GetValueOrDefault("Model", "reMarkable")}";
                     });
@@ -92,7 +90,7 @@ public partial class SettingsViewModel : ViewModelBase
                 DeviceInfo = "No device connected.";
                 ServiceStatus = "N/A";
             }
-            
+
             IsDeviceConnected = e;
             OnPropertyChanged(nameof(IsDeviceConnected));
             OnPropertyChanged(nameof(ServiceStatus));
@@ -108,46 +106,69 @@ public partial class SettingsViewModel : ViewModelBase
         {
             _configuration = config;
             EnableWifiSync = config.EnableWifiSync;
-            SyncIntervalMinutes = config.SyncIntervalMinutes;
+            SyncIntervalSeconds = config.SyncIntervalSeconds;
             AutoSync = config.AutoSync;
-            TargetNotebook = config.TargetNotebook;
             MaxCacheSizeMB = config.MaxCacheSizeMB;
             CacheRetentionDays = config.CacheRetentionDays;
             KeepLocalCopies = config.KeepLocalCopies;
         }
     }
-    
+
     [RelayCommand]
     private async Task SaveSettingsAsync()
     {
         _configuration.EnableWifiSync = EnableWifiSync;
-        _configuration.SyncIntervalMinutes = SyncIntervalMinutes;
+        _configuration.SyncIntervalSeconds = SyncIntervalSeconds;
         _configuration.AutoSync = AutoSync;
-        _configuration.TargetNotebook = TargetNotebook;
         _configuration.MaxCacheSizeMB = MaxCacheSizeMB;
         _configuration.CacheRetentionDays = CacheRetentionDays;
         _configuration.KeepLocalCopies = KeepLocalCopies;
-        
+
         await _databaseService.SaveConfigurationAsync(_configuration);
-        _logger?.LogInformation("Settings saved");
+
+        if (AutoSync)
+        {
+            _ = _syncService.StartAutomaticSyncAsync(SyncIntervalSeconds);
+        }
+        else
+        {
+            _ = _syncService.StopAutomaticSyncAsync();
+        }
+
+        if (EnableWifiSync)
+        {
+            // Attempt to toggle the SSH WLAN feature
+            _ = _sshService.EnableWifiOverSshAsync();
+        }
+
+        // Push the new interval to the watcher script inside the remarkable
+        await _configProvider.UpdateDeviceConfigurationAsync(true);
+
+        var dashboardVm = App.ServiceProvider?.GetService<DashboardViewModel>();
+        if (dashboardVm != null)
+        {
+            Task.Run(dashboardVm.LoadDashboardDataAsync);
+        }
+
+        _logger?.LogInformation("Settings saved and deployed to background workers");
     }
-    
+
     [RelayCommand]
     private async Task DisconnectDeviceAsync()
     {
         try
         {
             _logger?.LogInformation("Disconnecting device and resetting configuration");
-            
+
             // Disconnect SSH
             if (_sshService.IsConnected)
             {
                 await _sshService.DisconnectAsync();
             }
-            
+
             // Clear the configuration to force setup screen
             await _databaseService.ClearCacheAsync();
-            
+
             // Clear saved configuration
             var config = await _databaseService.GetConfigurationAsync();
             if (config != null)
@@ -157,9 +178,9 @@ public partial class SettingsViewModel : ViewModelBase
                 config.ServiceVersion = string.Empty;
                 await _databaseService.SaveConfigurationAsync(config);
             }
-            
+
             _logger?.LogInformation("Device disconnected and configuration reset");
-            
+
             // Navigate back to setup
             if (App.ServiceProvider?.GetService<MainViewModel>() is { } mainVm)
             {
@@ -173,13 +194,13 @@ public partial class SettingsViewModel : ViewModelBase
             {
                 var exePath = currentProcess.MainModule.FileName;
                 _logger?.LogInformation("Restarting application: {Path}", exePath);
-                
+
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = exePath,
                     UseShellExecute = true
                 });
-                
+
                 if (App.Current.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
                 {
                     desktop.Shutdown();
@@ -191,21 +212,21 @@ public partial class SettingsViewModel : ViewModelBase
             _logger?.LogError(ex, "Failed to disconnect device");
         }
     }
-    
+
     [RelayCommand]
     private async Task ClearCacheAsync()
     {
         await _databaseService.ClearCacheAsync();
         _logger?.LogInformation("Cache cleared");
     }
-    
+
     [RelayCommand]
     private async Task CleanupOldCacheAsync()
     {
         var deleted = await _databaseService.CleanupOldCacheAsync(CacheRetentionDays);
         _logger?.LogInformation("Cleaned up {Count} old cache entries", deleted);
     }
-    
+
     [RelayCommand]
     private async Task RestartServiceAsync()
     {
@@ -213,27 +234,27 @@ public partial class SettingsViewModel : ViewModelBase
         {
             IsRestartingService = true;
             ServiceStatus = "Restarting...";
-            
+
             _logger?.LogInformation("Restarting reMarkable sync services");
-            
+
             // Stop the services first
             await _sshService.ExecuteCommandAsync("systemctl stop onenote-sync-watcher");
             await _sshService.ExecuteCommandAsync("systemctl stop onenote-sync-httpclient");
-            
+
             // Wait a moment for services to fully stop
             await Task.Delay(2000);
-            
+
             // Start the services again
             await _sshService.ExecuteCommandAsync("systemctl start onenote-sync-watcher");
             await _sshService.ExecuteCommandAsync("systemctl start onenote-sync-httpclient");
-            
+
             // Wait for services to start
             await Task.Delay(2000);
-            
+
             // Check service status
             var watcherStatus = await _sshService.CheckServiceStatusAsync("onenote-sync-watcher");
             var httpClientStatus = await _sshService.CheckServiceStatusAsync("onenote-sync-httpclient");
-            
+
             if (watcherStatus && httpClientStatus)
             {
                 ServiceStatus = "Services running";
@@ -255,7 +276,7 @@ public partial class SettingsViewModel : ViewModelBase
             IsRestartingService = false;
         }
     }
-    
+
     [RelayCommand]
     private async Task CheckServiceStatusAsync()
     {
@@ -266,10 +287,10 @@ public partial class SettingsViewModel : ViewModelBase
                 ServiceStatus = "Not connected";
                 return;
             }
-            
+
             var watcherStatus = await _sshService.CheckServiceStatusAsync("onenote-sync-watcher");
             var httpClientStatus = await _sshService.CheckServiceStatusAsync("onenote-sync-httpclient");
-            
+
             if (watcherStatus && httpClientStatus)
             {
                 ServiceStatus = "All services running";
@@ -289,7 +310,7 @@ public partial class SettingsViewModel : ViewModelBase
             ServiceStatus = "Unknown";
         }
     }
-    
+
     // Check status when connecting
     partial void OnIsDeviceConnectedChanged(bool value)
     {
