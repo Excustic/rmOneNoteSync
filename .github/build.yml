@@ -1,0 +1,86 @@
+name: Build and Package App
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    # Notice the "app/" prefix added to the file paths below!
+    - name: Inject Client ID
+      run: sed -i 's/__REPLACE_ME__/${{ secrets.AZURE_CLIENT_ID }}/g' app/rmOneNoteSyncApp/appsettings.json
+
+    # --- 1. PORTABLE BINARIES ---
+    - name: Publish Windows (Portable)
+      run: dotnet publish app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj -c Release -r win-x64 -p:PublishSingleFile=true --self-contained true -o ./artifacts/windows
+
+    # --- INNO SETUP ---
+    - name: Compile Windows Installer (.exe)
+      uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+      with:
+        path: installer.iss
+
+    - name: Upload Windows Setup Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Windows-Installer-Exe
+        path: ./artifacts/windows-installer
+
+    # --- 2. LINUX PACKAGES (.deb & .rpm) ---
+    - name: Publish Linux (Portable)
+      run: dotnet publish app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj -c Release -r linux-x64 -p:PublishSingleFile=true --self-contained true -o ./artifacts/linux
+
+    - name: Build Ubuntu/Debian Package (.deb)
+      run: dotnet msbuild app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj /t:CreateDeb /p:TargetFramework=net9.0 /p:RuntimeIdentifier=linux-x64 /p:Configuration=Release
+
+    - name: Build Fedora/RedHat Package (.rpm)
+      run: dotnet msbuild app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj /t:CreateRpm /p:TargetFramework=net9.0 /p:RuntimeIdentifier=linux-x64 /p:Configuration=Release
+      
+    # The packages are generated deep in the bin/Release folder. 
+    # This step simply finds them and moves them to our artifacts staging area.
+    - name: Collect Linux Packages
+      run: |
+        mkdir -p ./artifacts/linux-packages
+        find app/rmOneNoteSyncApp -name "*.deb" -exec mv {} ./artifacts/linux-packages/ \;
+        find app/rmOneNoteSyncApp -name "*.rpm" -exec mv {} ./artifacts/linux-packages/ \;
+    
+    # --- MACOS PACKAGE ---
+    - name: Publish macOS (Portable)
+      run: dotnet publish app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj -c Release -r osx-x64 -p:PublishSingleFile=true --self-contained true -o ./artifacts/macos
+
+    # --- 3. UPLOAD ARTIFACTS ---
+    - name: Upload Windows Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Windows-Portable
+        path: ./artifacts/windows
+
+    - name: Upload Linux Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Linux-Portable
+        path: ./artifacts/linux
+
+    - name: Upload macOS Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macOS-Portable
+        path: ./artifacts/macos
+
+    - name: Upload Linux Installers
+      uses: actions/upload-artifact@v4
+      with:
+        name: Linux-Installers-Deb-Rpm
+        path: ./artifacts/linux-packages

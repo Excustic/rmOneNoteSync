@@ -1,0 +1,19 @@
+# IDEs and VS Code
+.vscode/
+.idea/
+*.sln.DotSettings.user
+.vs/
+.vshistory/
+.history/
+
+# Build Outputs
+app/rmOneNoteSyncApp/bin/
+app/rmOneNoteSyncApp/obj/
+rm-daemon/build/
+rm-daemon/release/
+*.out
+
+# Logs & Testing
+*.log
+rm-daemon/bugs/
+rm-daemon/testing_tools/uploads/
