@@ -149,9 +149,6 @@ jobs:
         cd rm-daemon
         make clean
         make all
-        
-        echo "--- WHERE DID THE BINARIES GO? ---"
-        ls -la
 
     - name: Package Device Artifacts
       run: |
