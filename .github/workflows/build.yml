@@ -2,7 +2,6 @@ name: Build and Package App
 
 on:
   push:
-    branches: [ "main", "fix-windows-installer" ]
     tags:
       - 'v*'
   workflow_dispatch:
@@ -163,13 +162,15 @@ jobs:
         name: rm-daemon-${{ matrix.device }}
         path: ./artifacts/rm-daemon-${{ matrix.device }}
 
-# --- JOB 4: THE RELEASE MANAGER ---
+  # --- JOB 4: THE RELEASE MANAGER ---
   publish-release:
-    # Wait for ALL builds to finish perfectly before attempting to release
     needs: [build-core, build-windows-installer, build-rm-daemon]
-    # ONLY run this job if the workflow was triggered by a Tag (e.g., v1.0.0)
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    
+    # NEW: Give the action permission to create a release
+    permissions:
+      contents: write
 
     steps:
     - name: Download All Artifacts
