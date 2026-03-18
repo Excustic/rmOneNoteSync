@@ -2,7 +2,7 @@
 ; Basic app info
 AppName=rmOneNoteSyncApp
 AppVersion=1.0.0
-Publisher=excustic
+AppPublisher=excustic
 
 ; Where it installs by default (C:\Program Files\rmOneNoteSyncApp)
 DefaultDirName={autopf}\rmOneNoteSyncApp
