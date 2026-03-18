@@ -204,41 +204,6 @@ int reconstruct_virtual_path(const char* doc_id, const char* page_num,
 }
 
 /**
- * is_under_shared_path - Check if a path matches the filter
- * 
- * @param full_path: Full virtual path to check
- * @param filter: Filter path (or "*" for all)
- * @return: true if path should be synced, false otherwise
- * 
- * Examples:
- *   filter="*" matches everything
- *   filter="Shared Vault" matches "Shared Vault/Math/Page1"
- *   filter="Work/Projects" matches "Work/Projects/Design/Draft"
- */
-bool is_under_shared_path(const char* full_path, const char* filter) {
-    if (!full_path || !filter) return false;
-    
-    // "*" means sync everything
-    if (strcmp(filter, "*") == 0) {
-        return true;
-    }
-    
-    // Check if full_path starts with filter
-    size_t filter_len = strlen(filter);
-    if (strncmp(full_path, filter, filter_len) != 0) {
-        return false;
-    }
-    
-    // Make sure it's a complete path component match
-    // (so "Work" doesn't match "Workspace")
-    if (full_path[filter_len] == '\0' || full_path[filter_len] == '/') {
-        return true;
-    }
-    
-    return false;
-}
-
-/**
  * parse_content_file_fixed - Parse .content file to get page numbers
  *
  * @param doc_id: Document UUID

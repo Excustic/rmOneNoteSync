@@ -47,20 +47,6 @@ int reconstruct_virtual_path(const char* doc_id, const char* page_num,
                             path_info_t* info);
 
 /**
- * is_under_shared_path - Check if a path matches the filter
- * 
- * @param full_path: Full virtual path to check
- * @param filter: Filter path (or "*" for all)
- * @return: true if path should be synced, false otherwise
- * 
- * Examples:
- *   is_under_shared_path("Shared Vault/Math/Page1", "*") -> true
- *   is_under_shared_path("Shared Vault/Math/Page1", "Shared Vault") -> true
- *   is_under_shared_path("Personal/Notes", "Shared Vault") -> false
- */
-bool is_under_shared_path(const char* full_path, const char* filter);
-
-/**
  * parse_content_file - Parse .content file to get page numbers
  * 
  * @param doc_id: Document UUID

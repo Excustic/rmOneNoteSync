@@ -57,7 +57,6 @@ class SyncServerHandler(http.server.BaseHTTPRequestHandler):
             config = {
                 "server_url": f"http://{self.server.server_address[0]}:{PORT}/upload",
                 "api_key": "test-api-key",
-                "shared_path": "*",
                 "upload_interval_seconds": 30,
                 "max_retries": 5,
                 "retry_delay_seconds": 20,
