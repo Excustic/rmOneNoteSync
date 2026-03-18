@@ -2,6 +2,7 @@ name: Build and Package App
 
 on:
   push:
+    branches: [ "main", "fix-windows-installer" ]
     tags:
       - 'v*'
   workflow_dispatch:
