@@ -144,9 +144,10 @@ jobs:
     - name: Package Device Artifacts
       run: |
         mkdir -p ./artifacts/rm-daemon-${{ matrix.device }}
-        mv rm-daemon/watcher ./artifacts/rm-daemon-${{ matrix.device }}/watcher-${{ matrix.device }}
-        mv rm-daemon/httpclient ./artifacts/rm-daemon-${{ matrix.device }}/httpclient-${{ matrix.device }}
-        mv rm-daemon/cache_debug ./artifacts/rm-daemon-${{ matrix.device }}/cache_debug-${{ matrix.device }}
+        # Notice the addition of the 'build/' folder in the source paths below!
+        mv rm-daemon/build/watcher ./artifacts/rm-daemon-${{ matrix.device }}/watcher-${{ matrix.device }}
+        mv rm-daemon/build/httpclient ./artifacts/rm-daemon-${{ matrix.device }}/httpclient-${{ matrix.device }}
+        mv rm-daemon/build/cache_debug ./artifacts/rm-daemon-${{ matrix.device }}/cache_debug-${{ matrix.device }}
 
     - name: Upload Daemon Artifacts
       uses: actions/upload-artifact@v4
