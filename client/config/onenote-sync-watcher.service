@@ -1,0 +1,13 @@
+[Unit]
+Description=reMarkable Sync Watcher
+After=home.mount
+
+[Service]
+Type=simple
+ExecStart=/home/root/onenote-sync/bin/watcher
+Restart=on-failure
+RestartSec=10
+User=root
+
+[Install]
+WantedBy=multi-user.target
