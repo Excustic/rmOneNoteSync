@@ -24,9 +24,9 @@ jobs:
       
     - name: Download rmc binaries
       run: |
-        curl -L -o app/rmOneNoteSyncApp/rmc-windows.exe https://github.com/Excustic/rmc/releases/download/alpha/rmc-x64.exe
-        curl -L -o app/rmOneNoteSyncApp/rmc-linux https://github.com/Excustic/rmc/releases/download/alpha/rmc-linux-x64
-        chmod +x app/rmOneNoteSyncApp/rmc-linux
+        curl -L -o app/rmOneNoteSyncApp/rmc-x64.exe https://github.com/Excustic/rmc/releases/download/alpha/rmc-x64.exe
+        curl -L -o app/rmOneNoteSyncApp/rmc-linux-x64 https://github.com/Excustic/rmc/releases/download/alpha/rmc-linux-x64
+        chmod +x app/rmOneNoteSyncApp/rmc-linux-x64
 
     - name: Publish Windows (Portable)
       run: dotnet publish app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj -c Release -r win-x64 -p:PublishSingleFile=true --self-contained true -o ./artifacts/windows
