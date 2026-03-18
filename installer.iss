@@ -1,8 +1,11 @@
 [Setup]
 ; Basic app info
 AppName=rmOneNoteSyncApp
-AppVersion=1.0.0
+AppVersion=0.4.0
 AppPublisher=excustic
+AppPublisherURL=https://github.com/Excustic/rmOneNoteSync
+AppSupportURL=https://github.com/Excustic/rmOneNoteSync/issues
+AppUpdatesURL=https://github.com/Excustic/rmOneNoteSync/releases
 
 ; Where it installs by default (C:\Program Files\rmOneNoteSyncApp)
 DefaultDirName={autopf}\rmOneNoteSyncApp

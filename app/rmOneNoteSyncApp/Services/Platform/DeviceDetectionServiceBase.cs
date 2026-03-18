@@ -62,7 +62,7 @@ public abstract class DeviceDetectionServiceBase : IDeviceDetectionService
         var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
         while (await timer.WaitForNextTickAsync())
         {
-            _logger.LogDebug("Checking device connection...");
+            // _logger.LogDebug("Checking device connection...");
             await CheckConnectionAsync();
         }
 

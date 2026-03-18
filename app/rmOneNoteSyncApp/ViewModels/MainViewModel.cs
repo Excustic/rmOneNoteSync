@@ -69,6 +69,7 @@ public partial class MainViewModel : ViewModelBase
                               !IsAuthenticated;
     public bool CanCompleteSetup => IsAuthenticated && IsOneNoteConfigured;
     public bool HasAuthenticationError => !string.IsNullOrEmpty(AuthenticationError);
+    private const string RepositoryURL = "https://github.com/excustic/rmOneNoteSync";
 
     public MainViewModel(
         IDeviceDetectionService detectionService,
@@ -399,6 +400,24 @@ public partial class MainViewModel : ViewModelBase
 
         // Explicitly notify that CurrentView has changed
         OnPropertyChanged(nameof(CurrentView));
+    }
+
+    [RelayCommand]
+    private void OpenRepositoryURL()
+    {
+        try
+        {
+            var ps = new System.Diagnostics.ProcessStartInfo(RepositoryURL)
+            {
+                UseShellExecute = true,
+                Verb = "open"
+            };
+            System.Diagnostics.Process.Start(ps);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to open URL {Url}", RepositoryURL);
+        }
     }
 
 }

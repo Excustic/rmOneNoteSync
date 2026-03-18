@@ -8,35 +8,6 @@
              x:Class="rmOneNoteSyncApp.Views.DashboardView"
              x:DataType="vm:DashboardViewModel"
              x:Name="DashboardRoot">
-    <!-- <UserControl.Styles> -->
-    <!--     ~1~ DataGrid Styles @1@ -->
-    <!--     <Style Selector="DataGrid"> -->
-    <!--         <Setter Property="Background" Value="Transparent"/> -->
-    <!--         <Setter Property="BorderBrush" Value="#e5e7eb"/> -->
-    <!--         <Setter Property="BorderThickness" Value="0"/> -->
-    <!--         <Setter Property="RowBackground" Value="White"/> -->
-    <!--         <Setter Property="AlternatingRowBackground" Value="#fafafa"/> -->
-    <!--         <Setter Property="HeadersVisibility" Value="Column"/> -->
-    <!--         <Setter Property="GridLinesVisibility" Value="Horizontal"/> -->
-    <!--         <Setter Property="HorizontalGridLinesBrush" Value="#e5e7eb"/> -->
-    <!--     </Style> -->
-    <!--      -->
-    <!--     <Style Selector="DataGridColumnHeader"> -->
-    <!--         <Setter Property="Background" Value="#f9fafb"/> -->
-    <!--         <Setter Property="Foreground" Value="#6b7280"/> -->
-    <!--         <Setter Property="FontWeight" Value="SemiBold"/> -->
-    <!--         <Setter Property="Padding" Value="8"/> -->
-    <!--         <Setter Property="SeparatorBrush" Value="#e5e7eb"/> -->
-    <!--     </Style> -->
-    <!--      -->
-    <!--     <Style Selector="DataGridRow"> -->
-    <!--         <Setter Property="FontSize" Value="14"/> -->
-    <!--     </Style> -->
-    <!--      -->
-    <!--     <Style Selector="DataGridCell"> -->
-    <!--         <Setter Property="Padding" Value="8"/> -->
-    <!--     </Style> -->
-    <!-- </UserControl.Styles> -->
     
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <StackPanel Spacing="20" Margin="30">

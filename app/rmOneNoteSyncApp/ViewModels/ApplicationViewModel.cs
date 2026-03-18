@@ -5,7 +5,7 @@ using rmOneNoteSyncApp.Views;
 
 namespace rmOneNoteSyncApp.ViewModels;
 
-public partial class ApplicationViewModel: ViewModelBase
+public partial class ApplicationViewModel : ViewModelBase
 {
     private readonly IClassicDesktopStyleApplicationLifetime? _desktop = App.Current.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
 
@@ -19,7 +19,8 @@ public partial class ApplicationViewModel: ViewModelBase
     private void OpenApplication()
     {
         if (_desktop == null) return;
-        var mainWindow = _desktop.MainWindow = new MainWindow();
+        _desktop.MainWindow = _desktop.MainWindow?.IsVisible == true ? _desktop.MainWindow : new MainWindow();
+        var mainWindow = _desktop.MainWindow;
         mainWindow.WindowState = WindowState.Normal;
         mainWindow.Show();
         mainWindow.BringIntoView();

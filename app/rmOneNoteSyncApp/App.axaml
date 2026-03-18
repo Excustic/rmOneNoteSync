@@ -95,13 +95,11 @@
     
     <TrayIcon.Icons>
         <TrayIcons>
-            <TrayIcon Icon="/Assets/avalonia-logo.ico" 
-                      ToolTipText="Avalonia Tray Icon ToolTip"
+            <TrayIcon Icon="/Assets/app-icon.ico" 
+                      ToolTipText="reMarkable OneNote Sync"
                       Command="{Binding OpenApplicationCommand}">
                 <TrayIcon.Menu>
                     <NativeMenu>
-                        <NativeMenuItem Header="Restart service on device"/>
-                        <NativeMenuItemSeparator/>
                         <NativeMenuItem Header="Exit" Command="{Binding ExitApplicationCommand}"/>
                     </NativeMenu>
                 </TrayIcon.Menu>
