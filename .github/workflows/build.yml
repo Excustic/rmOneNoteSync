@@ -131,7 +131,7 @@ jobs:
         ./toolchain.sh -y -d /opt/codex/${{ matrix.device }}
     - name: Get dir filetree
       run: |
-        ls -la --tree
+        ls --tree
     - name: Build Daemon Binaries
       # Removed the 'bash -c' wrapper so errors bubble up correctly
       run: |
