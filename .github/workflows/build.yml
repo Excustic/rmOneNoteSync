@@ -2,7 +2,7 @@ name: Build and Package App
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "fix-windows-installer" ]
     tags:
       - 'v*'
   workflow_dispatch:
@@ -15,6 +15,18 @@ jobs:
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
+
+    - name: Stamp Version Numbers
+      # Only run this if we are building a tagged release
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        # Strip the 'v' from 'v1.0.0' so it's just '1.0.0'
+        VERSION="${GITHUB_REF_NAME#v}" 
+        
+        # Overwrite the placeholders
+        sed -i "s/0.0.0-PLACEHOLDER/$VERSION/g" app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj
+        sed -i "s/0.0.0-PLACEHOLDER/$VERSION/g" installer.iss
+        sed -i "s/0.0.0-PLACEHOLDER/$VERSION/g" rm-daemon/src/version.h
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4

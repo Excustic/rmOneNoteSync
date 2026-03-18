@@ -2,6 +2,7 @@
 #define _GNU_SOURCE
 #include "cache_io.h"
 #include "metadata_parser.h"
+#include "version.h"
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
@@ -14,8 +15,6 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-
-#define APP_VERSION "2.0.1"
 
 // Configuration defaults
 #define DEFAULT_WATCH_PATH "/home/root/.local/share/remarkable/xochitl"

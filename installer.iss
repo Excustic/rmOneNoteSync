@@ -1,7 +1,7 @@
 [Setup]
 ; Basic app info
 AppName=rmOneNoteSyncApp
-AppVersion=0.4.0
+AppVersion=0.0.0-PLACEHOLDER
 AppPublisher=excustic
 AppPublisherURL=https://github.com/Excustic/rmOneNoteSync
 AppSupportURL=https://github.com/Excustic/rmOneNoteSync/issues

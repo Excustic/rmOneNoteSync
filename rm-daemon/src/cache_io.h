@@ -2,12 +2,12 @@
 #ifndef CACHE_IO_H
 #define CACHE_IO_H
 
+#include "version.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <time.h>
 
 #define CACHE_MAGIC 0x524D4348 // "RMCH" in hex
-#define CACHE_VERSION 4        // Version 4: simple FIFO queue (no sync status)
 #define UUID_LEN 36
 #define MAX_PAGE_NUM_LEN 8
 #define PATH_MAX 4096

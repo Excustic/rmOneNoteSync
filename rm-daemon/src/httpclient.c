@@ -2,6 +2,7 @@
 #include "cache_io.h"
 #include "http_simple.h"
 #include "metadata_parser.h"
+#include "version.h"
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -10,8 +11,6 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-
-#define APP_VERSION "2.0.1"
 
 // Configuration defaults
 #define DEFAULT_SERVER_URL "http://192.168.1.100:8080/upload"
