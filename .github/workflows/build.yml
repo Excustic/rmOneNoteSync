@@ -101,10 +101,12 @@ jobs:
         name: Windows-Installer-Exe
         path: artifacts/windows-installer
 
+
 # --- JOB 3: THE CROSS-COMPILATION ORCHESTRA ---
   build-rm-daemon:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false # <--- NEW: Prevents one failure from cancelling the rest!
       matrix:
         include:
           - device: chiappa
@@ -124,23 +126,24 @@ jobs:
       run: curl -L -o toolchain.sh ${{ matrix.url }}
 
     - name: Install Toolchain
-      # The -y flag auto-accepts the license, -d specifies the install directory
       run: |
         chmod +x toolchain.sh
         ./toolchain.sh -y -d /opt/codex/${{ matrix.device }}
-
-    - name: Build Daemon Binaries
-      # We have to use 'bash -c' here because 'source' is not a standard shell command in the default runner
+    - name: Get dir filetree
       run: |
-        bash -c "
-          source /opt/codex/${{ matrix.device }}/environment-setup-*
-          cd rm-daemon
-          make clean
-          make all
-        "
+        ls -la --tree
+    - name: Build Daemon Binaries
+      # Removed the 'bash -c' wrapper so errors bubble up correctly
+      run: |
+        source /opt/codex/${{ matrix.device }}/environment-setup-*
+        cd rm-daemon
+        make clean
+        make all
+        
+        echo "--- WHERE DID THE BINARIES GO? ---"
+        ls -la
 
     - name: Package Device Artifacts
-      # Rename the binaries so they don't overwrite each other when downloaded
       run: |
         mkdir -p ./artifacts/rm-daemon-${{ matrix.device }}
         mv rm-daemon/watcher ./artifacts/rm-daemon-${{ matrix.device }}/watcher-${{ matrix.device }}
