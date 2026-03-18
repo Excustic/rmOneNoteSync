@@ -3,6 +3,8 @@ name: Build and Package App
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -87,7 +89,6 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: Windows-Portable
-        # We drop the downloaded files exactly where Inno Setup expects them
         path: artifacts/windows 
 
     - name: Compile Windows Installer (.exe)
@@ -106,7 +107,7 @@ jobs:
   build-rm-daemon:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false # <--- NEW: Prevents one failure from cancelling the rest!
+      fail-fast: true # If one fails, stop all
       matrix:
         include:
           - device: chiappa
@@ -131,7 +132,6 @@ jobs:
         ./toolchain.sh -y -d /opt/codex/${{ matrix.device }}
 
     - name: Build Daemon Binaries
-      # Removed the 'bash -c' wrapper so errors bubble up correctly
       run: |
         source /opt/codex/${{ matrix.device }}/environment-setup-*
         cd rm-daemon
@@ -144,13 +144,35 @@ jobs:
     - name: Package Device Artifacts
       run: |
         mkdir -p ./artifacts/rm-daemon-${{ matrix.device }}
-        # Notice the addition of the 'build/' folder in the source paths below!
-        mv rm-daemon/build/watcher ./artifacts/rm-daemon-${{ matrix.device }}/watcher-${{ matrix.device }}
-        mv rm-daemon/build/httpclient ./artifacts/rm-daemon-${{ matrix.device }}/httpclient-${{ matrix.device }}
-        mv rm-daemon/build/cache_debug ./artifacts/rm-daemon-${{ matrix.device }}/cache_debug-${{ matrix.device }}
+        mv rm-daemon/build/watcher ./artifacts/rm-daemon-${{ matrix.device }}/watcher
+        mv rm-daemon/build/httpclient ./artifacts/rm-daemon-${{ matrix.device }}/httpclient
+        mv rm-daemon/build/cache_debug ./artifacts/rm-daemon-${{ matrix.device }}/cache_debug
 
     - name: Upload Daemon Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: rm-daemon-${{ matrix.device }}
         path: ./artifacts/rm-daemon-${{ matrix.device }}
+
+# --- JOB 4: THE RELEASE MANAGER ---
+  publish-release:
+    # Wait for ALL builds to finish perfectly before attempting to release
+    needs: [build-core, build-windows-installer, build-rm-daemon]
+    # ONLY run this job if the workflow was triggered by a Tag (e.g., v1.0.0)
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Download All Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: release-artifacts
+        merge-multiple: true # Dumps all .exe, .deb, and binaries into one flat folder
+
+    - name: Publish GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: release-artifacts/**/*
+        generate_release_notes: true
+        # Automatically mark as "Pre-release" if the tag contains 'alpha' or 'beta'
+        prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
