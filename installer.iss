@@ -31,3 +31,14 @@ Source: "artifacts\windows\*"; DestDir: "{app}"; Flags: ignoreversion recursesub
 Name: "{group}\rmOneNoteSyncApp"; Filename: "{app}\rmOneNoteSyncApp.exe"
 ; Creates the Desktop shortcut (tied to the Task above)
 Name: "{autodesktop}\rmOneNoteSyncApp"; Filename: "{app}\rmOneNoteSyncApp.exe"; Tasks: desktopicon
+
+[Run]
+; 1. Tell HTTP.sys to let ANY standard user open port 8080 without Admin rights
+Filename: "netsh"; Parameters: "http add urlacl url=http://*:8080/ user=EVERYONE"; Flags: runhidden
+; 2. Add the Windows Firewall exception so it doesn't block incoming tablet syncs
+Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""rmOneNoteSyncApp"" dir=in action=allow protocol=TCP localport=8080"; Flags: runhidden
+
+[UninstallRun]
+; Clean up our mess when the user uninstalls the app!
+Filename: "netsh"; Parameters: "http delete urlacl url=http://*:8080/"; Flags: runhidden
+Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""rmOneNoteSyncApp"""; Flags: runhidden
