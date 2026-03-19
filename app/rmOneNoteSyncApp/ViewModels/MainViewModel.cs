@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -12,6 +13,7 @@ namespace rmOneNoteSyncApp.ViewModels;
 
 public partial class MainViewModel : ViewModelBase
 {
+    private readonly ISoftwareUpdateService _updateService;
     private readonly IDeviceDetectionService _detectionService;
     private readonly ISshService _sshService;
     private readonly IDeploymentService _deploymentService;
@@ -54,7 +56,7 @@ public partial class MainViewModel : ViewModelBase
     private string _deviceStatusText = "No device connected";
 
     [ObservableProperty]
-    private string _connectionStateText = "Disconnected";
+    private string _connectionStateText = "";
 
     [ObservableProperty]
     private string _authenticationError = "";
@@ -65,11 +67,16 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isAuthenticating;
 
+    [ObservableProperty]
+    private bool _isUpdateAvailable;
+
     public bool CanConnect => IsConnected && !string.IsNullOrWhiteSpace(DevicePassword) && !IsAuthenticating &&
                               !IsAuthenticated;
     public bool CanCompleteSetup => IsAuthenticated && IsOneNoteConfigured;
     public bool HasAuthenticationError => !string.IsNullOrEmpty(AuthenticationError);
     private const string RepositoryURL = "https://github.com/excustic/rmOneNoteSync";
+
+    private string _updateUrl = "";
 
     public MainViewModel(
         IDeviceDetectionService detectionService,
@@ -78,6 +85,7 @@ public partial class MainViewModel : ViewModelBase
         IDatabaseService databaseService,
         IOneNoteAuthService oneNoteAuth,
         ISyncService syncService,
+        ISoftwareUpdateService updateService,
         ILogger<MainViewModel> logger)
     {
         _detectionService = detectionService;
@@ -85,6 +93,7 @@ public partial class MainViewModel : ViewModelBase
         _deploymentService = deploymentService;
         _databaseService = databaseService;
         _syncService = syncService;
+        _updateService = updateService;
         _logger = logger;
 
         // Initialize with Dashboard view model
@@ -150,6 +159,8 @@ public partial class MainViewModel : ViewModelBase
 
         _oneNoteAuth = oneNoteAuth;
 
+        CheckUpdates();
+
         // Check if already authenticated with OneNote
         Task.Run(async () =>
         {
@@ -160,6 +171,17 @@ public partial class MainViewModel : ViewModelBase
                 OneNoteStatusText = $"Signed in as {silentAuth.UserName}";
             }
         });
+    }
+
+    private async void CheckUpdates()
+    {
+        var (updateAvailable, _, releaseUrl) = await _updateService.CheckForUpdatesAsync();
+
+        if (updateAvailable)
+        {
+            _updateUrl = releaseUrl;
+            IsUpdateAvailable = true;
+        }
     }
 
     private async Task ReconnectSSH()
@@ -248,6 +270,18 @@ public partial class MainViewModel : ViewModelBase
 
             _ = ReconnectSSH();
             OnPropertyChanged(nameof(CanConnect));
+        });
+    }
+
+    [RelayCommand]
+    private void OpenUpdateUrl()
+    {
+        if (string.IsNullOrEmpty(_updateUrl)) return;
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = _updateUrl,
+            UseShellExecute = true
         });
     }
 
@@ -407,12 +441,12 @@ public partial class MainViewModel : ViewModelBase
     {
         try
         {
-            var ps = new System.Diagnostics.ProcessStartInfo(RepositoryURL)
+            var ps = new ProcessStartInfo(RepositoryURL)
             {
                 UseShellExecute = true,
                 Verb = "open"
             };
-            System.Diagnostics.Process.Start(ps);
+            Process.Start(ps);
         }
         catch (Exception ex)
         {

@@ -17,10 +17,10 @@ namespace rmOneNoteSyncApp.Services.Platform;
 /// <summary>
 /// Base implementation with common device detection logic
 /// </summary>
-public abstract class DeviceDetectionServiceBase : IDeviceDetectionService
+public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseService databaseService) : IDeviceDetectionService
 {
-    protected readonly ILogger _logger;
-    protected readonly IDatabaseService _databaseService;
+    protected readonly ILogger _logger = logger;
+    protected readonly IDatabaseService _databaseService = databaseService;
     private Timer? _pollingTimer;
     private DeviceInfo? _currentDevice;
     private bool _isMonitoring;
@@ -38,12 +38,6 @@ public abstract class DeviceDetectionServiceBase : IDeviceDetectionService
     private bool _isConnected;
     public bool IsConnected => _currentDevice != null && _isConnected;
     public DeviceInfo? CurrentDevice => _currentDevice;
-
-    protected DeviceDetectionServiceBase(ILogger logger, IDatabaseService databaseService)
-    {
-        _logger = logger;
-        _databaseService = databaseService;
-    }
 
     public void ResetWifiScanAttempts()
     {
@@ -135,7 +129,6 @@ public abstract class DeviceDetectionServiceBase : IDeviceDetectionService
                         DetectedAt = DateTime.UtcNow,
                         ConnectionType = DeviceConnectionType.WiFi
                     };
-
                 }
             }
             else

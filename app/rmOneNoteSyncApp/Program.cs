@@ -65,6 +65,8 @@ class Program
                 services.AddSingleton<ISyncServerService, SyncServerService>();
                 services.AddSingleton<IOneNoteClient, OneNoteClient>();
                 services.AddSingleton<IRmConverterService, RmConverterService>();
+                services.AddSingleton<IStartupService, StartupService>();
+                services.AddSingleton<ISoftwareUpdateService, SoftwareUpdateService>();
 
                 // Register ViewModels
                 services.AddSingleton<MainViewModel>();

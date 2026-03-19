@@ -2,7 +2,7 @@
 Type=Application
 Name=reMarkable OneNote Sync
 Comment=Synchronize reMarkable notebooks to OneNote
-Exec=rmOneNoteSync/rmOneNoteSyncApp
+Exec=rmOneNoteSyncApp
 Icon=rmOneNoteSyncApp
 Categories=Office;Utility;
 Terminal=false

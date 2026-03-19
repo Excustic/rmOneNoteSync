@@ -102,9 +102,8 @@ public partial class DashboardViewModel : ViewModelBase
             {
                 IsConnected = e.IsConnected;
                 RequiresManualScan = _detectionService.RequiresManualScan;
-
             });
-
+            Task.Run(LoadDashboardDataAsync);
 
         };
 
@@ -330,18 +329,6 @@ public partial class DashboardViewModel : ViewModelBase
 
         _detectionService.ResetWifiScanAttempts();
         await _detectionService.CheckConnectionAsync();
-
-        // Let the events handle UI updates, but if we're still disconnected after a bit, reset
-        await Task.Delay(1000);
-
-        if (!IsConnected)
-        {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                DeviceStatus = "Disconnected";
-                RequiresManualScan = _detectionService.RequiresManualScan;
-            });
-        }
     }
 
     [RelayCommand]

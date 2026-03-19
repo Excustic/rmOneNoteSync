@@ -16,6 +16,7 @@ public partial class SettingsViewModel : ViewModelBase
 {
     private readonly IDatabaseService _databaseService;
     private readonly ISshService _sshService;
+    private readonly IStartupService _startupService;
     private readonly ISyncService _syncService;
     private readonly IConfigurationProviderService _configProvider;
     private readonly ILogger<SettingsViewModel>? _logger;
@@ -50,13 +51,15 @@ public partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _deviceInfo = "No device connected";
-
-    public SettingsViewModel(IDatabaseService databaseService, ISshService sshService, ISyncService syncService, IConfigurationProviderService configProvider)
+    [ObservableProperty]
+    private bool _runOnStartup;
+    public SettingsViewModel(IDatabaseService databaseService, ISshService sshService, ISyncService syncService, IConfigurationProviderService configProvider, IStartupService startupService)
     {
         _databaseService = databaseService;
         _sshService = sshService;
         _syncService = syncService;
         _configProvider = configProvider;
+        _startupService = startupService;
 
         try
         {
@@ -64,12 +67,17 @@ public partial class SettingsViewModel : ViewModelBase
         }
         catch { }
 
+        _runOnStartup = _startupService.IsStartupEnabled();
         _sshService.OnConnectionChanged += SshServiceOnConnectionChanged;
         SshServiceOnConnectionChanged(this, _sshService.IsConnected);
         // Load configuration
         Task.Run(LoadSettingsAsync);
     }
 
+    partial void OnRunOnStartupChanged(bool value)
+    {
+        _startupService.SetStartup(value);
+    }
     private void SshServiceOnConnectionChanged(object? sender, bool e)
     {
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>

@@ -158,6 +158,7 @@
                                            Foreground="#707070" FontSize="11" Margin="0,4,0,8"/>
                             </StackPanel>
                         </Border>
+
                         <!-- About section -->
                             <StackPanel Orientation="Horizontal" DockPanel.Dock="Bottom">
                                 <!-- GitHub button -->
@@ -185,6 +186,18 @@
                                             FontSize="12"
                                             VerticalAlignment="Center" Margin="8,0,0,0"/>
                             </StackPanel>
+                            <Border DockPanel.Dock="Bottom" Background="#3b82f6" CornerRadius="6" Padding="12,8" Margin="0,0,0,10"
+                                IsVisible="{Binding IsUpdateAvailable}"
+                                BoxShadow="0 4 6 -1 #10000000">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="✨ New Update Available!" Foreground="White" FontWeight="SemiBold" FontSize="13"/>
+                                    <Button Content="Download Release" 
+                                    Command="{Binding OpenUpdateUrlCommand}"
+                                    Background="#ffffff" Foreground="#3b82f6" 
+                                    FontSize="12" Padding="8,4" CornerRadius="4"
+                                    HorizontalAlignment="Left" Cursor="Hand"/>
+                                </StackPanel>
+                            </Border>
                     </DockPanel>
                 </Border>
                 

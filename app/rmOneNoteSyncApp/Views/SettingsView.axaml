@@ -54,10 +54,16 @@
                         </StackPanel>
                     </Grid>
                 </StackPanel>
-                
             </Border>
             
-            
+            <!-- App Settings-->
+            <Border Background="White" CornerRadius="8" BoxShadow="0 2 10 0 #10000000" Padding="20">
+                <StackPanel Spacing="15">
+                    <TextBlock Text="App Settings" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                    <CheckBox Content="Run automatically on system startup" IsChecked="{Binding RunOnStartup}"/>
+                </StackPanel>
+            </Border>
+
             <!-- Sync Settings -->
             <Border Background="White" CornerRadius="8" BoxShadow="0 2 10 0 #10000000" Padding="20">
                 <StackPanel Spacing="15">

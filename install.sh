@@ -18,6 +18,6 @@ cp Assets/rmOneNoteSync.desktop ~/.config/autostart/
 # 4. Install the Desktop shortcut
 cp Assets/rmOneNoteSync.desktop ~/.local/share/applications/
 # Update the Exec path in the desktop file to point to the new location
-sed -i "s|Exec=rmOneNoteSyncApp|Exec=$HOME/.local/bin/rmOneNoteSync/rmOneNoteSyncApp|g" ~/.local/share/applications/rmOneNoteSync.desktop
+sed -i "s|^Exec=.*|Exec=$HOME/.local/bin/rmOneNoteSync/rmOneNoteSyncApp|g" ~/.local/share/applications/rmOneNoteSync.desktop
 
 echo "Installation complete! You can now find the app in your application launcher."
