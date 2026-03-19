@@ -25,7 +25,7 @@ OutputDir=artifacts\windows-installer
 OutputBaseFilename=rmOneNoteSyncApp-Setup
 Compression=lzma2
 SolidCompression=yes
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -41,11 +41,8 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-; 1. Tell HTTP.sys to let ANY standard user open port 8080 without Admin rights
-Filename: "netsh"; Parameters: "http add urlacl url=""http://localhost:8080/"" user=""NT AUTHORITY\\Authenticated Users"""; Flags: runhidden
-
-; 2. Add the Windows Firewall exception so it doesn't block incoming tablet syncs
-Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""{#MyAppName}"" dir=in action=allow protocol=TCP localport=8080 profile=private"; Flags: runhidden
+Filename: "netsh"; Parameters: "http add urlacl url=http://+:8080/ user=EVERYONE"; Flags: runhidden
+Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""{#MyAppName}"" dir=in action=allow protocol=TCP localport=8080 profile=private,domain"; Flags: runhidden
 
 [UninstallRun]
 ; Clean up our mess when the user uninstalls the app!

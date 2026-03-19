@@ -42,24 +42,16 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
         <Content Include="Assets\rmOneNoteSync.desktop">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
             <LinuxPath>/usr/share/applications/rmOneNoteSync.desktop</LinuxPath>
         </Content>
         <Content Include="Assets\rmOneNoteSync.desktop">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
             <LinuxPath>/etc/xdg/autostart/rmOneNoteSync.desktop</LinuxPath>
         </Content>
         <Content Include="Assets\app-icon.png">
-            <LinuxPath>/usr/share/icons/hicolor/256x256/apps/rmOneNoteSyncApp.png</LinuxPath>
+            <LinuxPath>/usr/share/pixmaps/rmOneNoteSyncApp.png</LinuxPath>
         </Content>
-        <!-- DEB / RPM support-->
-        <LinuxPackageItem Include="Assets\rmOneNoteSync.desktop">
-            <InstallPath>/usr/share/applications/rmOneNoteSync.desktop</InstallPath>
-        </LinuxPackageItem>
-        <LinuxPackageItem Include="Assets\rmOneNoteSync.desktop">
-            <InstallPath>/etc/xdg/autostart/rmOneNoteSync.desktop</InstallPath>
-        </LinuxPackageItem>
-        <LinuxPackageItem Include="Assets\app-icon.png">
-            <InstallPath>/usr/share/icons/hicolor/256x256/apps/rmOneNoteSyncApp.png</InstallPath>
-        </LinuxPackageItem>
     </ItemGroup>
 
     <ItemGroup>
