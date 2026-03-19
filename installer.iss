@@ -12,6 +12,8 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL=https://github.com/Excustic/rmOneNoteSync
 AppSupportURL=https://github.com/Excustic/rmOneNoteSync/issues
 AppUpdatesURL=https://github.com/Excustic/rmOneNoteSync/releases
+SetupIconFile=app\rmOneNoteSyncApp\Assets\app-icon.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 
 ; Where it installs by default (C:\Program Files\rmOneNoteSyncApp)
 DefaultDirName={autopf}\{#MyAppName}

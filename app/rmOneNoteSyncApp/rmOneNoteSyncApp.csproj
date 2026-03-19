@@ -6,14 +6,31 @@
         <Nullable>enable</Nullable>
         <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
         <ApplicationManifest>app.manifest</ApplicationManifest>
+        <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
         <Version>0.0.0-PLACEHOLDER</Version>
+        <PackageId>rmOneNoteSyncApp</PackageId>
+        <PackageTags>rmOneNoteSync;reMarkable;OneNote;sync;notebook</PackageTags>
+        <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/Excustic/rmOneNoteSync</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/Excustic/rmOneNoteSync</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <Authors>excustic</Authors>
+        <Description>Synchronize reMarkable notebooks to OneNote</Description>
     </PropertyGroup>
 
     <ItemGroup>
         <AvaloniaResource Include="Assets\**" />
     </ItemGroup>
-    
+
+    <PropertyGroup>
+        <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="licenses\LICENSE.txt" Pack="true" PackagePath=""/>
+    </ItemGroup>
+
     <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
         <Content Include="rmc-x64.exe" Link="rmc.exe">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
