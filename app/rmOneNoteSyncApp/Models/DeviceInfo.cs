@@ -16,6 +16,34 @@ public class DeviceInfo
     public DeviceConnectionType ConnectionType { get; set; }
     public string? DeviceVersion { get; set; }
     public string? DeviceSerial { get; set; }
+    private string? _model;
+    public string? Model
+    {
+        get => _model; internal set
+        {
+            string m = value?.ToLower() ?? "";
+            string variant = "rm1";
+            if (m.Contains("ferrari"))
+                variant = "ferrari";
+            else if (m.Contains("chiappa"))
+                variant = "chiappa";
+            else if (m.Contains('1'))
+                variant = "rm1";
+            else if (m.Contains('2'))
+                variant = "rm2";
+            _model = variant;
+        }
+    }
+    public string? SyncVersion { get; internal set; }
+
+    public string DeviceDisplayName => (Model ?? "unknown") switch
+    {
+        "ferrari" => "reMarkable Paper Pro",
+        "chiappa" => "reMarkable Move",
+        "rm1" => "reMarkable 1",
+        "rm2" => "reMarkable 2",
+        _ => Model ?? "Unknown"
+    };
 }
 
 public enum DeviceConnectionType

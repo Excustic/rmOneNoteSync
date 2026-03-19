@@ -9,19 +9,27 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using rmOneNoteSyncApp.Services.Interfaces;
+using rmOneNoteSyncApp.Models;
+using System.Formats.Tar;
+using System.Reflection;
+using System.Text.Json;
 namespace rmOneNoteSyncApp.Services
 {
     public class DeploymentService(
         ILogger<DeploymentService> logger,
-        IConfigurationProviderService configProvider) : IDeploymentService
+        IConfigurationProviderService configProvider,
+        IDeviceDetectionService deviceDetectionService,
+        ISshService sshService) : IDeploymentService
     {
         private readonly ILogger<DeploymentService> _logger = logger;
         private readonly IConfigurationProviderService _configProvider = configProvider;
+        private readonly IDeviceDetectionService _deviceDetectionService = deviceDetectionService;
+        private readonly ISshService _sshService = sshService;
         public static readonly string REMOTE_BASE_PATH = "/home/root/onenote-sync";
 
         public event EventHandler<DeploymentProgressEventArgs>? DeploymentProgress;
 
-        public async Task<DeploymentResult> CheckInstallationAsync(ISshService sshService)
+        public async Task<DeploymentResult> CheckInstallationAsync()
         {
             DeploymentResult result = new();
 
@@ -30,7 +38,7 @@ namespace rmOneNoteSyncApp.Services
                 ReportProgress("Checking existing installation...", 0.1, DeploymentStage.Checking);
 
                 // Check if directory exists
-                string dirCheck = await sshService.ExecuteCommandAsync($"test -d {REMOTE_BASE_PATH} && echo 'exists'");
+                string dirCheck = await _sshService.ExecuteCommandAsync($"test -d {REMOTE_BASE_PATH} && echo 'exists'");
                 if (!dirCheck.Contains("exists"))
                 {
                     result.IsInstalled = false;
@@ -40,7 +48,7 @@ namespace rmOneNoteSyncApp.Services
                 // Check version file
                 try
                 {
-                    string versionContent = await sshService.ExecuteCommandAsync($"cat {REMOTE_BASE_PATH}/version.json");
+                    string versionContent = await _sshService.ExecuteCommandAsync($"cat {REMOTE_BASE_PATH}/version.json");
                     if (string.IsNullOrEmpty(versionContent))
                     {
                         throw new ArgumentNullException(nameof(versionContent));
@@ -56,9 +64,9 @@ namespace rmOneNoteSyncApp.Services
                 }
 
                 // Check component status
-                result.ComponentStatus["watcher"] = await CheckServiceAsync(sshService, "onenote-sync-watcher");
-                result.ComponentStatus["httpclient"] = await CheckServiceAsync(sshService, "onenote-sync-httpclient");
-                result.ComponentStatus["cache"] = await CheckFileExistsAsync(sshService, $"{REMOTE_BASE_PATH}/cache/.sync_cache");
+                result.ComponentStatus["watcher"] = await CheckServiceAsync("onenote-sync-watcher");
+                result.ComponentStatus["httpclient"] = await CheckServiceAsync("onenote-sync-httpclient");
+                result.ComponentStatus["cache"] = await CheckFileExistsAsync($"{REMOTE_BASE_PATH}/cache/.sync_cache");
 
                 result.Success = true;
             }
@@ -72,7 +80,7 @@ namespace rmOneNoteSyncApp.Services
             return result;
         }
 
-        public async Task<DeploymentResult> DeployAsync(ISshService sshService)
+        public async Task<DeploymentResult> DeployAsync()
         {
             DeploymentResult result = new();
 
@@ -81,19 +89,24 @@ namespace rmOneNoteSyncApp.Services
                 ReportProgress("Starting deployment...", 0, DeploymentStage.PreparingFiles);
 
                 // Step 1: Prepare filesystem
-                await PrepareFilesystemAsync(sshService);
+                await PrepareFilesystemAsync();
                 ReportProgress("Filesystem prepared", 0.2, DeploymentStage.PreparingFiles);
 
                 // Step 2: Create directory structure
-                await CreateDirectoryStructureAsync(sshService);
+                await CreateDirectoryStructureAsync();
                 ReportProgress("Directory structure created", 0.3, DeploymentStage.PreparingFiles);
 
                 // Step 3: Download binaries
-                string localExtractedDir = await DownloadAndExtractLatestReleaseAsync();
+                DeviceInfo? device;
+                if ((device = _deviceDetectionService.CurrentDevice) == null)
+                {
+                    throw new InvalidOperationException("No device selected");
+                }
+                string localExtractedDir = await DownloadAndExtractLatestReleaseAsync(device);
                 ReportProgress("Binaries downloaded and extracted", 0.4, DeploymentStage.DownloadingBinaries);
 
                 // Step 4: Upload binaries
-                await UploadBinariesAsync(sshService, localExtractedDir);
+                await UploadBinariesAsync(localExtractedDir);
                 ReportProgress("Binaries uploaded", 0.5, DeploymentStage.UploadingBinaries);
 
                 try
@@ -106,19 +119,19 @@ namespace rmOneNoteSyncApp.Services
                 catch { /* Ignore cleanup errors */ }
 
                 // Step 5: Upload configuration files
-                await UploadConfigurationAsync(sshService);
+                await UploadConfigurationAsync();
                 ReportProgress("Configuration uploaded", 0.6, DeploymentStage.ConfiguringServices);
 
                 // Step 6: Install systemd services
-                await InstallSystemdServicesAsync(sshService);
+                await InstallSystemdServicesAsync();
                 ReportProgress("Services installed", 0.8, DeploymentStage.ConfiguringServices);
 
                 // Step 7: Start services
-                await StartServicesAsync(sshService);
+                await StartServicesAsync();
                 ReportProgress("Services started", 0.9, DeploymentStage.StartingServices);
 
                 // Step 8: Verify installation
-                DeploymentResult checkResult = await CheckInstallationAsync(sshService);
+                DeploymentResult checkResult = await CheckInstallationAsync();
                 result.Success = checkResult.Success && checkResult.IsInstalled;
                 result.IsInstalled = checkResult.IsInstalled;
                 result.InstalledVersion = checkResult.InstalledVersion;
@@ -137,15 +150,15 @@ namespace rmOneNoteSyncApp.Services
             return result;
         }
 
-        private static async Task PrepareFilesystemAsync(ISshService sshService)
+        private async Task PrepareFilesystemAsync()
         {
             // Make filesystem writable
-            _ = await sshService.ExecuteCommandAsync("mount -o remount,rw /");
+            _ = await _sshService.ExecuteCommandAsync("mount -o remount,rw /");
 
             // Unmount /etc if it's separately mounted
             try
             {
-                _ = await sshService.ExecuteCommandAsync("umount /etc -l");
+                _ = await _sshService.ExecuteCommandAsync("umount /etc -l");
             }
             catch
             {
@@ -153,7 +166,7 @@ namespace rmOneNoteSyncApp.Services
             }
         }
 
-        private static async Task CreateDirectoryStructureAsync(ISshService sshService)
+        private async Task CreateDirectoryStructureAsync()
         {
             string[] directories =
             [
@@ -166,20 +179,19 @@ namespace rmOneNoteSyncApp.Services
 
             foreach (string? dir in directories)
             {
-                _ = await sshService.ExecuteCommandAsync($"mkdir -p {dir}");
+                _ = await _sshService.ExecuteCommandAsync($"mkdir -p {dir}");
             }
         }
 
-        private async Task<string> DownloadAndExtractLatestReleaseAsync()
+        private async Task<string> DownloadAndExtractLatestReleaseAsync(DeviceInfo device)
         {
             ReportProgress("Fetching latest release from GitHub...", 0.1, DeploymentStage.DownloadingBinaries);
 
             using HttpClient httpClient = new();
-            // GitHub API requires a User-Agent header to work
             httpClient.DefaultRequestHeaders.Add("User-Agent", "rmOneNoteSyncApp-Installer");
 
-            // 1. Get latest release info
-            string releaseUrl = "https://api.github.com/repos/Excustic/rmOneNoteSyncClient/releases/tags/latest";
+            // 1. Fixed URL for the new repo
+            string releaseUrl = "https://api.github.com/repos/Excustic/rmOneNoteSync/releases/latest";
             GitHubRelease? releaseInfo = await httpClient.GetFromJsonAsync<GitHubRelease>(releaseUrl);
 
             if (releaseInfo?.Assets == null || releaseInfo.Assets.Count == 0)
@@ -187,34 +199,44 @@ namespace rmOneNoteSyncApp.Services
                 throw new Exception("No release assets found on GitHub.");
             }
 
-            // 2. Find the zip asset (since you are uploading a zip file to the release)
-            GitHubAsset asset = releaseInfo.Assets.FirstOrDefault(static a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) ?? throw new Exception("Could not find a .zip binary in the latest GitHub release.");
+            // 2. Map the device to the exact tar.gz asset
+            string expectedAssetName = GetDaemonAssetName(device.Model);
+
+            GitHubAsset asset = releaseInfo.Assets.FirstOrDefault(a => a.Name.Equals(expectedAssetName, StringComparison.OrdinalIgnoreCase))
+                ?? throw new Exception($"Could not find binary '{expectedAssetName}' for your device in the latest release.");
+
             ReportProgress($"Downloading {asset.Name}...", 0.4, DeploymentStage.DownloadingBinaries);
 
-            // 3. Create a unique temporary directory
             string tempExtractDir = Path.Combine(Path.GetTempPath(), $"rmOneNoteSync_{Guid.NewGuid()}");
-            _ = Directory.CreateDirectory(tempExtractDir);
+            Directory.CreateDirectory(tempExtractDir);
+            string localTarPath = Path.Combine(tempExtractDir, asset.Name);
 
-            string localZipPath = Path.Combine(tempExtractDir, asset.Name);
-
-            // 4. Download the zip file
+            // 3. Download the tar.gz file
             using (Stream downloadStream = await httpClient.GetStreamAsync(asset.BrowserDownloadUrl))
-            using (FileStream fileStream = File.Create(localZipPath))
+            using (FileStream fileStream = File.Create(localTarPath))
             {
                 await downloadStream.CopyToAsync(fileStream);
             }
 
             ReportProgress("Extracting files...", 0.6, DeploymentStage.DownloadingBinaries);
 
-            // 5. Extract the zip file and delete the original zip archive
-            ZipFile.ExtractToDirectory(localZipPath, tempExtractDir, overwriteFiles: true);
-            File.Delete(localZipPath);
+            // 4. Extract the .tar.gz using native .NET 9 libraries
+            using (FileStream fileStream = File.OpenRead(localTarPath))
+            using (GZipStream gzipStream = new(fileStream, CompressionMode.Decompress))
+            {
+                TarFile.ExtractToDirectory(gzipStream, tempExtractDir, overwriteFiles: true);
+            }
 
-            // Return the path to the folder containing your extracted binaries
+            File.Delete(localTarPath);
             return tempExtractDir;
         }
 
-        private static async Task UploadBinariesAsync(ISshService sshService, string localExtractedDir)
+        // Helper method to map the device model string to your GitHub Action artifacts
+        private static string GetDaemonAssetName(string? model)
+        {
+            return $"rm-daemon-{model}.tar.gz";
+        }
+        private async Task UploadBinariesAsync(string localExtractedDir)
         {
             // Find the 'bin' directory if it exists inside the extracted zip, otherwise use root
             string? binPath = Directory.GetDirectories(localExtractedDir, "bin", SearchOption.AllDirectories).FirstOrDefault();
@@ -229,37 +251,39 @@ namespace rmOneNoteSyncApp.Services
                 string fileName = Path.GetFileName(localFile);
                 string remotePath = $"{REMOTE_BASE_PATH}/bin/{fileName}";
 
-                await sshService.UploadFileAsync(localFile, remotePath);
-                _ = await sshService.ExecuteCommandAsync($"chmod +x {remotePath}");
+                await _sshService.UploadFileAsync(localFile, remotePath);
+                _ = await _sshService.ExecuteCommandAsync($"chmod +x {remotePath}");
             }
         }
 
-        private async Task UploadConfigurationAsync(ISshService sshService)
+        private async Task UploadConfigurationAsync()
         {
-            // Create configuration files
             string watcherConfig = "WATCH_PATH=/home/root/.local/share/remarkable/xochitl\n" +
                                    "LOG_PATH=/home/root/onenote-sync/logs/watcher.log\n" +
                                    "CACHE_PATH=/home/root/onenote-sync/cache/.sync_cache";
 
-            string versionJson = @"{
-          ""version"": ""2.0.1"",
-          ""installed_date"": """ + DateTime.UtcNow.ToString("o") + @""",
-          ""components"": {
-            ""watcher"": ""2.0.1"",
-            ""httpclient"": ""2.0.1"",
-            ""cache_format"": ""4""
-          }
-        }";
+            // 1. Grab the clean version (e.g., "0.6.0") just like we did for the UI
+            string versionInfo = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
+            string cleanVersion = versionInfo.Split('+')[0];
+
+            // 2. Use Raw String Literals to cleanly inject variables into JSON without escaping quotes
+            string versionJson = $$"""
+            {
+              "version": "{{cleanVersion}}",
+              "installed_date": "{{DateTime.UtcNow:o}}",
+              "cache_format": "4"
+            }
+            """;
 
             // Write configs via SSH
-            _ = await sshService.ExecuteCommandAsync($"echo '{watcherConfig}' > {REMOTE_BASE_PATH}/watcher.conf");
-            _ = await sshService.ExecuteCommandAsync($"echo '{versionJson}' > {REMOTE_BASE_PATH}/version.json");
+            _ = await _sshService.ExecuteCommandAsync($"echo '{watcherConfig}' > {REMOTE_BASE_PATH}/watcher.conf");
+            _ = await _sshService.ExecuteCommandAsync($"echo '{versionJson}' > {REMOTE_BASE_PATH}/version.json");
 
             // Generate httpclient.conf via ConfigurationProviderService bypassng service restart
             _ = await _configProvider.UpdateDeviceConfigurationAsync(restartService: false);
         }
 
-        private static async Task InstallSystemdServicesAsync(ISshService sshService)
+        private async Task InstallSystemdServicesAsync()
         {
             string watcherService = @"[Unit]
             Description=reMarkable Sync Watcher
@@ -291,28 +315,28 @@ namespace rmOneNoteSyncApp.Services
             WantedBy=multi-user.target";
 
             // Install service files
-            _ = await sshService.ExecuteCommandAsync($"echo '{watcherService}' > /etc/systemd/system/onenote-sync-watcher.service");
-            _ = await sshService.ExecuteCommandAsync($"echo '{httpclientService}' > /etc/systemd/system/onenote-sync-httpclient.service");
+            _ = await _sshService.ExecuteCommandAsync($"echo '{watcherService}' > /etc/systemd/system/onenote-sync-watcher.service");
+            _ = await _sshService.ExecuteCommandAsync($"echo '{httpclientService}' > /etc/systemd/system/onenote-sync-httpclient.service");
 
             // Reload systemd
-            _ = await sshService.ExecuteCommandAsync("systemctl daemon-reload");
+            _ = await _sshService.ExecuteCommandAsync("systemctl daemon-reload");
 
             // Enable services
-            _ = await sshService.ExecuteCommandAsync("systemctl enable onenote-sync-watcher");
-            _ = await sshService.ExecuteCommandAsync("systemctl enable onenote-sync-httpclient");
+            _ = await _sshService.ExecuteCommandAsync("systemctl enable onenote-sync-watcher");
+            _ = await _sshService.ExecuteCommandAsync("systemctl enable onenote-sync-httpclient");
         }
 
-        private static async Task StartServicesAsync(ISshService sshService)
+        private async Task StartServicesAsync()
         {
-            _ = await sshService.ExecuteCommandAsync("systemctl start onenote-sync-watcher");
-            _ = await sshService.ExecuteCommandAsync("systemctl start onenote-sync-httpclient");
+            _ = await _sshService.ExecuteCommandAsync("systemctl start onenote-sync-watcher");
+            _ = await _sshService.ExecuteCommandAsync("systemctl start onenote-sync-httpclient");
         }
 
-        private static async Task<bool> CheckServiceAsync(ISshService sshService, string serviceName)
+        private async Task<bool> CheckServiceAsync(string serviceName)
         {
             try
             {
-                string status = await sshService.ExecuteCommandAsync($"systemctl is-active {serviceName}");
+                string status = await _sshService.ExecuteCommandAsync($"systemctl is-active {serviceName}");
                 return status.Trim() == "active";
             }
             catch
@@ -321,11 +345,11 @@ namespace rmOneNoteSyncApp.Services
             }
         }
 
-        private static async Task<bool> CheckFileExistsAsync(ISshService sshService, string path)
+        private async Task<bool> CheckFileExistsAsync(string path)
         {
             try
             {
-                string result = await sshService.ExecuteCommandAsync($"test -f {path} && echo 'exists'");
+                string result = await _sshService.ExecuteCommandAsync($"test -f {path} && echo 'exists'");
                 return result.Contains("exists");
             }
             catch
@@ -336,10 +360,15 @@ namespace rmOneNoteSyncApp.Services
 
         private static string ExtractVersionFromJson(string json)
         {
-            // Simple extraction - in production use proper JSON parsing
-            int versionStart = json.IndexOf("\"version\":") + 11;
-            int versionEnd = json.IndexOf('\'', versionStart);
-            return json[versionStart..versionEnd];
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(json.Trim());
+                return doc.RootElement.GetProperty("version").GetString() ?? "Unknown";
+            }
+            catch
+            {
+                return "Unknown";
+            }
         }
 
         private void ReportProgress(string message, double progress, DeploymentStage stage)
@@ -353,16 +382,16 @@ namespace rmOneNoteSyncApp.Services
             });
         }
 
-        public async Task<DeploymentResult> UpdateAsync(ISshService sshService)
+        public async Task<DeploymentResult> UpdateAsync()
         {
             // For updates, we backup config, deploy new version, restore config
             string backupPath = Path.GetTempFileName();
 
             try
             {
-                _ = await BackupConfigurationAsync(sshService, backupPath);
-                DeploymentResult result = await DeployAsync(sshService);
-                _ = await RestoreConfigurationAsync(sshService, backupPath);
+                _ = await BackupConfigurationAsync(backupPath);
+                DeploymentResult result = await DeployAsync();
+                _ = await RestoreConfigurationAsync(backupPath);
                 return result;
             }
             finally
@@ -374,25 +403,25 @@ namespace rmOneNoteSyncApp.Services
             }
         }
 
-        public async Task<DeploymentResult> UninstallAsync(ISshService sshService)
+        public async Task<DeploymentResult> UninstallAsync()
         {
             DeploymentResult result = new();
 
             try
             {
                 // Stop services
-                _ = await sshService.ExecuteCommandAsync("systemctl stop onenote-sync-watcher");
-                _ = await sshService.ExecuteCommandAsync("systemctl stop onenote-sync-httpclient");
+                _ = await _sshService.ExecuteCommandAsync("systemctl stop onenote-sync-watcher");
+                _ = await _sshService.ExecuteCommandAsync("systemctl stop onenote-sync-httpclient");
 
                 // Disable services
-                _ = await sshService.ExecuteCommandAsync("systemctl disable onenote-sync-watcher");
-                _ = await sshService.ExecuteCommandAsync("systemctl disable onenote-sync-httpclient");
+                _ = await _sshService.ExecuteCommandAsync("systemctl disable onenote-sync-watcher");
+                _ = await _sshService.ExecuteCommandAsync("systemctl disable onenote-sync-httpclient");
 
                 // Remove service files
-                _ = await sshService.ExecuteCommandAsync("rm -f /etc/systemd/system/onenote-sync-*.service");
+                _ = await _sshService.ExecuteCommandAsync("rm -f /etc/systemd/system/onenote-sync-*.service");
 
                 // Remove installation directory
-                _ = await sshService.ExecuteCommandAsync($"rm -rf {REMOTE_BASE_PATH}");
+                _ = await _sshService.ExecuteCommandAsync($"rm -rf {REMOTE_BASE_PATH}");
 
                 result.Success = true;
                 result.IsInstalled = false;
@@ -406,12 +435,12 @@ namespace rmOneNoteSyncApp.Services
             return result;
         }
 
-        public async Task<bool> BackupConfigurationAsync(ISshService sshService, string localPath)
+        public async Task<bool> BackupConfigurationAsync(string localPath)
         {
             try
             {
-                await sshService.DownloadFileAsync($"{REMOTE_BASE_PATH}/watcher.conf", localPath + ".watcher");
-                await sshService.DownloadFileAsync($"{REMOTE_BASE_PATH}/httpclient.conf", localPath + ".httpclient");
+                await _sshService.DownloadFileAsync($"{REMOTE_BASE_PATH}/watcher.conf", localPath + ".watcher");
+                await _sshService.DownloadFileAsync($"{REMOTE_BASE_PATH}/httpclient.conf", localPath + ".httpclient");
                 return true;
             }
             catch
@@ -420,18 +449,18 @@ namespace rmOneNoteSyncApp.Services
             }
         }
 
-        public async Task<bool> RestoreConfigurationAsync(ISshService sshService, string localPath)
+        public async Task<bool> RestoreConfigurationAsync(string localPath)
         {
             try
             {
                 if (File.Exists(localPath + ".watcher"))
                 {
-                    await sshService.UploadFileAsync(localPath + ".watcher", $"{REMOTE_BASE_PATH}/watcher.conf");
+                    await _sshService.UploadFileAsync(localPath + ".watcher", $"{REMOTE_BASE_PATH}/watcher.conf");
                 }
 
                 if (File.Exists(localPath + ".httpclient"))
                 {
-                    await sshService.UploadFileAsync(localPath + ".httpclient", $"{REMOTE_BASE_PATH}/httpclient.conf");
+                    await _sshService.UploadFileAsync(localPath + ".httpclient", $"{REMOTE_BASE_PATH}/httpclient.conf");
                 }
 
                 return true;

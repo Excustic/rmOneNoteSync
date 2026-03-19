@@ -17,18 +17,16 @@ namespace rmOneNoteSyncApp.Services.Platform;
 /// <summary>
 /// Base implementation with common device detection logic
 /// </summary>
-public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseService databaseService) : IDeviceDetectionService
+public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseService databaseService, ISshService sshService) : IDeviceDetectionService
 {
     protected readonly ILogger _logger = logger;
     protected readonly IDatabaseService _databaseService = databaseService;
+    protected readonly ISshService _sshService = sshService;
     private Timer? _pollingTimer;
     private DeviceInfo? _currentDevice;
     private bool _isMonitoring;
     private int _wifiScanAttempts = 0;
     private const int MAX_WIFI_SCAN_ATTEMPTS = 3;
-    private DateTime? _lastSeenAt;
-    private static readonly TimeSpan DISCONNECT_TIMEOUT_WIFI = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan DISCONNECT_TIMEOUT_USB = TimeSpan.FromSeconds(3);
     private bool _requiresManualScan;
     public bool RequiresManualScan => _requiresManualScan;
 
@@ -85,20 +83,28 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
 
             // Show temporary disconnection until proven otherwise.
             var tempConnected = _isConnected;
+            var tempDevice = _currentDevice;
             _isConnected = true; // Assume connected until proven otherwise.
             if (networkInterface != null && await PingDeviceAsync(REMARKABLE_USB_IP))
             {
                 // Verify we can ping the device on the USB IP
-                if (_currentDevice == null || _currentDevice.ConnectionType != DeviceConnectionType.USB)
+                if (_currentDevice == null || _currentDevice.ConnectionType != DeviceConnectionType.USB || _currentDevice.MacAddress != config?.DeviceMacAddress)
                 {
+                    if (!_sshService.IsConnected || _sshService.CurrentIp != REMARKABLE_USB_IP)
+                        await _sshService.ConnectAsync(REMARKABLE_USB_IP, config?.DevicePassword);
+                    var deviceInfo = await _sshService.GetDeviceInfoAsync();
                     // New USB connection
                     _currentDevice = new DeviceInfo
                     {
                         IpAddress = REMARKABLE_USB_IP,
                         InterfaceName = networkInterface.Name,
-                        MacAddress = GetMacAddress(networkInterface),
+                        MacAddress = await _sshService.GetMacAddressAsync() ?? "Unknown",
                         DetectedAt = DateTime.UtcNow,
-                        ConnectionType = DeviceConnectionType.USB
+                        ConnectionType = DeviceConnectionType.USB,
+                        Model = deviceInfo.TryGetValue("Model", out var model) ? model : "Unknown",
+                        DeviceVersion = deviceInfo.TryGetValue("Version", out var version) ? version : "Unknown",
+                        DeviceSerial = deviceInfo.TryGetValue("Serial", out var serial) ? serial : "Unknown",
+                        SyncVersion = deviceInfo.TryGetValue("SyncVersion", out var syncVersion) ? syncVersion : "Unknown"
                     };
 
 
@@ -107,7 +113,6 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
                         _ = ArpScan(config);
                 }
                 _wifiScanAttempts = 0;
-                _lastSeenAt = DateTime.UtcNow;
                 _requiresManualScan = false;
             }
 
@@ -115,19 +120,23 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
             else if (!string.IsNullOrEmpty(targetIp) && await PingDeviceAsync(targetIp))
             {
                 _wifiScanAttempts = 0;
-                _lastSeenAt = DateTime.UtcNow;
                 _requiresManualScan = false;
-
                 if (_currentDevice == null || _currentDevice.ConnectionType != DeviceConnectionType.WiFi || _currentDevice.IpAddress != targetIp)
                 {
-                    var macAddress = config?.DeviceMacAddress ?? "Unknown";
+                    if (!_sshService.IsConnected || _sshService.CurrentIp != targetIp)
+                        await _sshService.ConnectAsync(targetIp, config?.DevicePassword);
+                    var deviceInfo = await _sshService.GetDeviceInfoAsync();
                     _currentDevice = new DeviceInfo
                     {
                         IpAddress = targetIp,
                         InterfaceName = "WLAN",
-                        MacAddress = macAddress,
+                        MacAddress = await _sshService.GetMacAddressAsync() ?? "Unknown",
                         DetectedAt = DateTime.UtcNow,
-                        ConnectionType = DeviceConnectionType.WiFi
+                        ConnectionType = DeviceConnectionType.WiFi,
+                        Model = deviceInfo.TryGetValue("Model", out var model) ? model : "Unknown",
+                        DeviceVersion = deviceInfo.TryGetValue("Version", out var version) ? version : "Unknown",
+                        DeviceSerial = deviceInfo.TryGetValue("Serial", out var serial) ? serial : "Unknown",
+                        SyncVersion = deviceInfo.TryGetValue("SyncVersion", out var syncVersion) ? syncVersion : "Unknown"
                     };
                 }
             }
@@ -137,7 +146,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
             }
 
             // Trigger UI event
-            if (tempConnected != _isConnected)
+            if (tempConnected != _isConnected || tempDevice != _currentDevice)
             {
                 DeviceConnectionChanged?.Invoke(this, new DeviceConnectionEventArgs
                 {
@@ -150,15 +159,22 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
             {
                 if (await ArpScan(config))
                 {
-                    if (_currentDevice == null || _currentDevice.ConnectionType != DeviceConnectionType.WiFi || _currentDevice.IpAddress != config.LastNetworkIp)
+                    if (_currentDevice == null || _currentDevice.ConnectionType != DeviceConnectionType.WiFi || _currentDevice.IpAddress != config.LastNetworkIp || _currentDevice.MacAddress != config.DeviceMacAddress)
                     {
+                        if (!await _sshService.ConnectAsync(config.LastNetworkIp, config?.DevicePassword))
+                            return false;
+                        var deviceInfo = await _sshService.GetDeviceInfoAsync();
                         _currentDevice = new DeviceInfo
                         {
                             IpAddress = config.LastNetworkIp,
                             InterfaceName = "WLAN",
-                            MacAddress = config.DeviceMacAddress,
+                            MacAddress = await _sshService.GetMacAddressAsync() ?? "Unknown",
                             DetectedAt = DateTime.UtcNow,
-                            ConnectionType = DeviceConnectionType.WiFi
+                            ConnectionType = DeviceConnectionType.WiFi,
+                            Model = deviceInfo.TryGetValue("Model", out var model) ? model : "Unknown",
+                            DeviceVersion = deviceInfo.TryGetValue("Version", out var version) ? version : "Unknown",
+                            DeviceSerial = deviceInfo.TryGetValue("Serial", out var serial) ? serial : "Unknown",
+                            SyncVersion = deviceInfo.TryGetValue("SyncVersion", out var syncVersion) ? syncVersion : "Unknown"
                         };
                     }
                 }
@@ -187,7 +203,6 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
                 if (wifiIp != null && await PingDeviceAsync(wifiIp.ToString()))
                 {
                     _wifiScanAttempts = 0;
-                    _lastSeenAt = DateTime.UtcNow;
 
                     string ipString = wifiIp.ToString();
 
@@ -286,62 +301,6 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
         {
             _logger.LogError(ex, "Error detecting local IP address");
             return null;
-        }
-    }
-
-    // public string GetHostIpAddress()
-    // {
-    //     try
-    //     {
-    //         // Find the IP address on the same subnet as the reMarkable
-    //         // The reMarkable is typically at 10.11.99.1, so we need our 10.11.99.x address
-    //         var interfaces = NetworkInterface.GetAllNetworkInterfaces()
-    //             .Where(i => i.OperationalStatus == OperationalStatus.Up &&
-    //                     i.NetworkInterfaceType != NetworkInterfaceType.Loopback);
-
-    //         foreach (var iface in interfaces)
-    //         {
-    //             var props = iface.GetIPProperties();
-    //             foreach (var addr in props.UnicastAddresses)
-    //             {
-    //                 if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-    //                 {
-    //                     var ip = addr.Address.ToString();
-    //                     // Check if it's in the reMarkable subnet
-    //                     if (!ip.StartsWith("10.11.99.")) continue;
-    //                     _logger.LogDebug("Found host IP for reMarkable communication: {IP}", ip);
-    //                     return ip;
-    //                 }
-    //             }
-    //         }
-
-    //         // Fallback to any local IP
-    //         var localIp = Dns.GetHostEntry(Dns.GetHostName())
-    //             .AddressList
-    //             .FirstOrDefault(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-    //             ?.ToString() ?? "127.0.0.1";
-
-    //         _logger.LogWarning("Could not find IP in reMarkable subnet, using {IP}", localIp);
-    //         return localIp;
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         _logger.LogError(ex, "Failed to determine host IP address");
-    //         return "127.0.0.1";
-    //     }
-    // }
-
-    private string GetMacAddress(NetworkInterface iface)
-    {
-        try
-        {
-            var mac = iface.GetPhysicalAddress();
-            var bytes = mac.GetAddressBytes();
-            return string.Join(":", bytes.Select(b => b.ToString("X2")));
-        }
-        catch
-        {
-            return "Unknown";
         }
     }
 

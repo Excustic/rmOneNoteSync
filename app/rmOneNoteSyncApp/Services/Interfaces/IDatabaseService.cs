@@ -8,7 +8,7 @@ namespace rmOneNoteSyncApp.Services.Interfaces;
 /// <summary>
 /// Local database service for caching and persistence
 /// </summary>
-public interface IDatabaseService : IDisposable
+public interface IDatabaseService
 {
     Task InitializeAsync(string databasePath);
     void Initialize(string databasePath);

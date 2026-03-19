@@ -10,13 +10,13 @@ namespace rmOneNoteSyncApp.Services.Interfaces;
 public interface IDeploymentService
 {
     event EventHandler<DeploymentProgressEventArgs>? DeploymentProgress;
-    
-    Task<DeploymentResult> CheckInstallationAsync(ISshService sshService);
-    Task<DeploymentResult> DeployAsync(ISshService sshService);
-    Task<DeploymentResult> UpdateAsync(ISshService sshService);
-    Task<DeploymentResult> UninstallAsync(ISshService sshService);
-    Task<bool> BackupConfigurationAsync(ISshService sshService, string localPath);
-    Task<bool> RestoreConfigurationAsync(ISshService sshService, string localPath);
+
+    Task<DeploymentResult> CheckInstallationAsync();
+    Task<DeploymentResult> DeployAsync();
+    Task<DeploymentResult> UpdateAsync();
+    Task<DeploymentResult> UninstallAsync();
+    Task<bool> BackupConfigurationAsync(string localPath);
+    Task<bool> RestoreConfigurationAsync(string localPath);
 }
 
 public class DeploymentProgressEventArgs : EventArgs

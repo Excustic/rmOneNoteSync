@@ -22,7 +22,7 @@
                     </StackPanel>
                     
                     <StackPanel Grid.Column="1" Spacing="8">
-                        <TextBlock Text="reMarkable Paper Pro" FontSize="20" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding DeviceDisplayName}" FontSize="20" FontWeight="SemiBold"/>
                         
                         <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="6">
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Status:" Foreground="#666" VerticalAlignment="Center"/>

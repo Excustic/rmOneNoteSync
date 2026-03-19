@@ -22,6 +22,19 @@
                            Foreground="White"
                            HorizontalAlignment="Left"/>
                     
+                    <Button Content="{Binding ClearDeviceCacheButtonText}" 
+                        Command="{Binding ClearDeviceCacheCommand}"
+                        Background="{Binding ClearDeviceCacheButtonBg}" 
+                        Foreground="{Binding ClearDeviceCacheButtonFg}"
+                        HorizontalAlignment="Left" Cursor="Hand">
+                        <Button.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="Background" Duration="0:0:0.2"/>
+                                <BrushTransition Property="Foreground" Duration="0:0:0.2"/>
+                            </Transitions>
+                        </Button.Transitions>
+                    </Button>
+                    
                     <!-- Service Management Section -->
                     <TextBlock Text="Service Management" FontSize="16" FontWeight="SemiBold" Margin="0,15,0,10"/>
                     
@@ -61,6 +74,18 @@
                 <StackPanel Spacing="15">
                     <TextBlock Text="App Settings" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10"/>
                     <CheckBox Content="Run automatically on system startup" IsChecked="{Binding RunOnStartup}"/>
+                    <Button Content="Sign In to OneNote Account" 
+                            Command="{Binding SignInOneNoteCommand}"
+                            IsVisible="{Binding !IsOneNoteAuthenticated}"
+                            Background="#0078d4" Foreground="White"
+                            HorizontalAlignment="Left"/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding IsOneNoteAuthenticated}">
+                        <Button Content="Sign Out of OneNote Account" 
+                                Command="{Binding SignOutOneNoteCommand}"
+                                Background="#f3f4f6" Foreground="#ef4444"
+                                HorizontalAlignment="Left"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 
@@ -95,8 +120,18 @@
                                Command="{Binding SaveSettingsCommand}"
                                Classes="primary"/>
                         
-                        <Button Content="Clear Cache" 
-                               Command="{Binding ClearCacheCommand}"/>
+                        <Button Content="{Binding ClearCacheButtonText}" 
+                            Command="{Binding ClearCacheCommand}"
+                            Background="{Binding ClearCacheButtonBg}" 
+                            Foreground="{Binding ClearCacheButtonFg}"
+                            HorizontalAlignment="Left" Cursor="Hand">
+                        <Button.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="Background" Duration="0:0:0.2"/>
+                                <BrushTransition Property="Foreground" Duration="0:0:0.2"/>
+                            </Transitions>
+                        </Button.Transitions>
+                    </Button>
                     </StackPanel>
                 </StackPanel>
             </Border>

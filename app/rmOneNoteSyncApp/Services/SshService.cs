@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using CommunityToolkit.Mvvm.ComponentModel;
 using Renci.SshNet;
 using Microsoft.Extensions.Logging;
 using rmOneNoteSyncApp.Services.Interfaces;
+using System.Text.Json;
 
 namespace rmOneNoteSyncApp.Services;
 
@@ -82,7 +82,6 @@ public class SshService(ILogger<SshService> logger) : ISshService, IDisposable
         {
             using var sshCommand = _sshClient.CreateCommand(command);
             sshCommand.CommandTimeout = TimeSpan.FromSeconds(30);
-
             var result = sshCommand.Execute();
 
             if (sshCommand.ExitStatus != 0 && !string.IsNullOrEmpty(sshCommand.Error))
@@ -110,7 +109,15 @@ public class SshService(ILogger<SshService> logger) : ISshService, IDisposable
             try
             {
                 var versionFile = await ExecuteCommandAsync("cat /home/root/onenote-sync/version.json");
-                info["SyncVersion"] = versionFile.Trim();
+                if (!string.IsNullOrWhiteSpace(versionFile) && !versionFile.Contains("No such file"))
+                {
+                    using JsonDocument doc = JsonDocument.Parse(versionFile.Trim());
+                    info["SyncVersion"] = doc.RootElement.GetProperty("version").GetString() ?? "Unknown";
+                }
+                else
+                {
+                    info["SyncVersion"] = "Not installed";
+                }
             }
             catch
             {
@@ -325,6 +332,48 @@ public class SshService(ILogger<SshService> logger) : ISshService, IDisposable
     {
         DisconnectAsync().GetAwaiter().GetResult();
         GC.SuppressFinalize(this);
+    }
+
+    public async Task<string?> GetMacAddressAsync()
+    {
+        string? macAddressOutput = null;
+        try
+        {
+            macAddressOutput = await ExecuteCommandAsync("cat /sys/class/net/wlan0/address");
+            if (!string.IsNullOrWhiteSpace(macAddressOutput))
+            {
+                logger.LogDebug("Fetched WLAN MAC Address: {MAC}", macAddressOutput);
+                return macAddressOutput.Trim();
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to fetch device MAC address");
+        }
+        return macAddressOutput;
+    }
+
+    public async Task<bool> RestartServicesAsync()
+    {
+        // Stop the services first
+        await ExecuteCommandAsync("systemctl stop onenote-sync-watcher");
+        await ExecuteCommandAsync("systemctl stop onenote-sync-httpclient");
+
+        // Wait a moment for services to fully stop
+        await Task.Delay(2000);
+
+        // Start the services again
+        await ExecuteCommandAsync("systemctl start onenote-sync-watcher");
+        await ExecuteCommandAsync("systemctl start onenote-sync-httpclient");
+
+        // Wait for services to start
+        await Task.Delay(2000);
+
+        // Check service status
+        var watcherStatus = await CheckServiceStatusAsync("onenote-sync-watcher");
+        var httpClientStatus = await CheckServiceStatusAsync("onenote-sync-httpclient");
+
+        return watcherStatus && httpClientStatus;
     }
 }
 

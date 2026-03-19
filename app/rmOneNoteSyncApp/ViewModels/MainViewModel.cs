@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Reflection;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -66,9 +67,42 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isAuthenticating;
+    private bool _isDeploying;
+    private bool _needsDeployment;
+    public bool NeedsDeployment
+    {
+        get => _needsDeployment;
+        set
+        {
+            if (SetProperty(ref _needsDeployment, value))
+            {
+                // When true, 100% opacity. When false, 0% opacity.
+                DeployBannerOpacity = value ? 1.0 : 0.0;
+            }
+        }
+    }
 
-    [ObservableProperty]
+    [ObservableProperty] private double _deployBannerOpacity = 0.0;
+    [ObservableProperty] private string _deployButtonText = "🔨 Fix it";
+    [ObservableProperty] private string _deployButtonBg = "#ffffff";
+    [ObservableProperty] private string _deployButtonFg = "#dd310fff";
+    private bool _isOpeningUpdate;
+    [ObservableProperty] private double _updateBannerOpacity = 0.0;
+    [ObservableProperty] private string _updateButtonText = "⬇️ Download";
+    [ObservableProperty] private string _updateButtonBg = "#ffffff";
+    [ObservableProperty] private string _updateButtonFg = "#3b82f6";
     private bool _isUpdateAvailable;
+    public bool IsUpdateAvailable
+    {
+        get => _isUpdateAvailable;
+        set
+        {
+            if (SetProperty(ref _isUpdateAvailable, value))
+            {
+                UpdateBannerOpacity = value ? 1.0 : 0.0;
+            }
+        }
+    }
 
     public bool CanConnect => IsConnected && !string.IsNullOrWhiteSpace(DevicePassword) && !IsAuthenticating &&
                               !IsAuthenticated;
@@ -247,7 +281,7 @@ public partial class MainViewModel : ViewModelBase
     private void OnConnectionChanged(object? sender, DeviceConnectionEventArgs e)
     {
         // Ensure UI updates happen on the main thread
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
         {
             CurrentDevice = e.Device;
             IsConnected = e.IsConnected;
@@ -257,6 +291,16 @@ public partial class MainViewModel : ViewModelBase
                 DeviceStatusText = $"Device detected at {e.Device.IpAddress}";
                 ConnectionStateText = $"{e.Device.ConnectionType} Connected";
                 ConnectionState = ConnectionState.Configured;
+
+                // Grab the current desktop app version to compare against the tablet
+                string currentAppVersion = Assembly.GetExecutingAssembly()
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                    .InformationalVersion?.Split('+')[0] ?? "0.0.0";
+                var installationStatus = await _deploymentService.CheckInstallationAsync();
+                NeedsDeployment = _detectionService.CurrentDevice?.SyncVersion == "Not installed" ||
+                                      _detectionService.CurrentDevice?.SyncVersion == "Unknown" ||
+                                      installationStatus.IsInstalled == false ||
+                                      installationStatus.InstalledVersion != currentAppVersion;
             }
             else
             {
@@ -265,24 +309,78 @@ public partial class MainViewModel : ViewModelBase
                 DevicePassword = string.Empty;
                 IsAuthenticated = false;
                 ConnectionState = ConnectionState.Disconnected;
-
+                NeedsDeployment = false;
             }
 
             _ = ReconnectSSH();
             OnPropertyChanged(nameof(CanConnect));
         });
     }
-
-    [RelayCommand]
-    private void OpenUpdateUrl()
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task DeployServiceAsync()
     {
-        if (string.IsNullOrEmpty(_updateUrl)) return;
+        if (_isDeploying || CurrentDevice == null) return;
+        _isDeploying = true; // Lock the button manually
+
+        DeployButtonText = "Deploying...";
+        DeployButtonBg = "#fef08a";
+        DeployButtonFg = "#854d0e";
+
+        var res = await _deploymentService.DeployAsync();
+
+        if (res.IsInstalled)
+        {
+            await _sshService.RestartServicesAsync();
+
+            DeployButtonText = "✅ Done";
+            DeployButtonBg = "#16a34a";
+            DeployButtonFg = "#ffffff";
+
+            await Task.Delay(2000);
+            NeedsDeployment = false; // Fades the banner out!
+        }
+        else
+        {
+            DeployButtonText = "❌ Failed";
+            DeployButtonBg = "#ef4444";
+            DeployButtonFg = "#ffffff";
+
+            await Task.Delay(3000);
+
+            // Revert to default state
+            DeployButtonText = "Fix it 🔨";
+            DeployButtonBg = "#ffffff";
+            DeployButtonFg = "#dd310fff";
+        }
+
+        _isDeploying = false; // Unlock
+    }
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task OpenUpdateUrlAsync() // Note: changed to Async to allow Task.Delay
+    {
+        if (_isOpeningUpdate || string.IsNullOrEmpty(_updateUrl)) return;
+        _isOpeningUpdate = true;
+
+        UpdateButtonText = "Opening...";
+        UpdateButtonBg = "#bfdbfe";
+        UpdateButtonFg = "#1e3a8a";
 
         Process.Start(new ProcessStartInfo
         {
             FileName = _updateUrl,
             UseShellExecute = true
         });
+
+        await Task.Delay(500); // Give the browser a second to launch
+
+        UpdateButtonText = "✅ Opened";
+        UpdateButtonBg = "#16a34a";
+        UpdateButtonFg = "#ffffff";
+
+        await Task.Delay(2000);
+        IsUpdateAvailable = false; // Fades the banner out so it stops bothering them!
+
+        _isOpeningUpdate = false;
     }
 
     [RelayCommand(CanExecute = nameof(CanConnect))]
@@ -306,25 +404,30 @@ public partial class MainViewModel : ViewModelBase
                 await _sshService.EnableWifiOverSshAsync();
 
                 // Fetch MAC address
-                try
-                {
-                    var macAddressOutput = await _sshService.ExecuteCommandAsync("cat /sys/class/net/wlan0/address");
-                    if (!string.IsNullOrWhiteSpace(macAddressOutput))
-                    {
-                        _fetchedMacAddress = macAddressOutput.Trim();
-                        _logger.LogDebug("Fetched WLAN MAC Address: {MAC}", _fetchedMacAddress);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to fetch device MAC address");
-                }
+                _fetchedMacAddress = await _sshService.GetMacAddressAsync() ?? "Unknown";
 
-                // Deploy services if needed
-                var installStatus = await _deploymentService.CheckInstallationAsync(_sshService);
+                // Deploy or Update services if needed
+                var installStatus = await _deploymentService.CheckInstallationAsync();
+
+                // Grab the current desktop app version to compare against the tablet
+                string currentAppVersion = Assembly.GetExecutingAssembly()
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                    .InformationalVersion?.Split('+')[0] ?? "0.0.0";
+
                 if (!installStatus.IsInstalled)
                 {
-                    await _deploymentService.DeployAsync(_sshService);
+                    _logger.LogInformation("No installation found on device. Deploying fresh daemon...");
+                    await _deploymentService.DeployAsync();
+                    await _sshService.RestartServicesAsync();
+                }
+                else if (installStatus.InstalledVersion != currentAppVersion)
+                {
+                    _logger.LogInformation("Tablet daemon is outdated ({Installed} vs {Current}). Triggering update...",
+                        installStatus.InstalledVersion, currentAppVersion);
+
+                    await _deploymentService.UpdateAsync();
+                    await _sshService.RestartServicesAsync();
+
                 }
             }
             else

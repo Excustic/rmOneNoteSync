@@ -56,7 +56,8 @@ public partial class DashboardViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _requiresManualScan;
-
+    [ObservableProperty]
+    private string _deviceDisplayName = "Unknown";
     [ObservableProperty]
     private ObservableCollection<ActivityItem> _recentActivities = new();
 
@@ -243,7 +244,7 @@ public partial class DashboardViewModel : ViewModelBase
                 {
                     LastConnected = lastConnected;
                 }
-
+                DeviceDisplayName = _detectionService.CurrentDevice?.DeviceDisplayName ?? "Unknown";
                 DeviceIp = _detectionService.IsConnected ? _detectionService.CurrentDevice?.IpAddress ?? "--" : config != null ? config.DeviceIp : "--";
 
                 TotalDocuments = config?.SyncFiles.Count ?? 0;

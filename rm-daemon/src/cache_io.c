@@ -68,7 +68,6 @@ static PageEntry *read_pages_from_file(FILE *f, uint16_t num_pages) {
       break;
     }
 
-
     // Add to linked list
     if (last_page) {
       last_page->next = page;

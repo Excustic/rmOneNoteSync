@@ -55,7 +55,7 @@
             <!-- Main Interface (shown when configured) -->
             <Grid IsVisible="{Binding !ShowSetupScreen}">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="250"/>
+                    <ColumnDefinition Width="280"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 
@@ -187,17 +187,62 @@
                                             VerticalAlignment="Center" Margin="8,0,0,0"/>
                             </StackPanel>
                             <Border DockPanel.Dock="Bottom" Background="#3b82f6" CornerRadius="6" Padding="12,8" Margin="0,0,0,10"
-                                IsVisible="{Binding IsUpdateAvailable}"
+                                Opacity="{Binding UpdateBannerOpacity}"
+                                IsHitTestVisible="{Binding IsUpdateAvailable}"
                                 BoxShadow="0 4 6 -1 #10000000">
-                                <StackPanel Spacing="6">
-                                    <TextBlock Text="✨ New Update Available!" Foreground="White" FontWeight="SemiBold" FontSize="13"/>
-                                    <Button Content="Download Release" 
-                                    Command="{Binding OpenUpdateUrlCommand}"
-                                    Background="#ffffff" Foreground="#3b82f6" 
-                                    FontSize="12" Padding="8,4" CornerRadius="4"
-                                    HorizontalAlignment="Left" Cursor="Hand"/>
-                                </StackPanel>
-                            </Border>
+                            
+                            <Border.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Opacity" Duration="0:0:0.3" Easing="SineEaseInOut"/>
+                                </Transitions>
+                            </Border.Transitions>
+
+                            <StackPanel Spacing="10" Orientation="Horizontal">
+                                <TextBlock Text="✨ New Update Available!" VerticalAlignment="Center" Foreground="White" FontWeight="SemiBold" FontSize="12"/>
+                                <Button Content="{Binding UpdateButtonText}" 
+                                        Command="{Binding OpenUpdateUrlCommand}"
+                                        Background="{Binding UpdateButtonBg}" 
+                                        Foreground="{Binding UpdateButtonFg}" 
+                                        FontSize="12" Padding="8,4" CornerRadius="4"
+                                        HorizontalAlignment="Left" Cursor="Hand">
+                                    <Button.Transitions>
+                                        <Transitions>
+                                            <BrushTransition Property="Background" Duration="0:0:0.2"/>
+                                            <BrushTransition Property="Foreground" Duration="0:0:0.2"/>
+                                        </Transitions>
+                                    </Button.Transitions>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <Border DockPanel.Dock="Bottom" Background="rgba(255, 30, 50, 0.7)" CornerRadius="6" Padding="12,8" Margin="0,0,0,10"
+                                Opacity="{Binding DeployBannerOpacity}"
+                                IsHitTestVisible="{Binding NeedsDeployment}"
+                                BoxShadow="0 4 6 -1 #10000000">
+                            
+                            <Border.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Opacity" Duration="0:0:0.3" Easing="SineEaseInOut"/>
+                                </Transitions>
+                            </Border.Transitions>
+
+                            <StackPanel Spacing="10" Orientation="Horizontal">
+                                <TextBlock Text="Missing latest sync firmware" VerticalAlignment="Center" Foreground="White" FontWeight="Light" FontSize="12"/>
+                                <Button Content="{Binding DeployButtonText}" 
+                                        Command="{Binding DeployServiceCommand}"
+                                        Background="{Binding DeployButtonBg}" 
+                                        Foreground="{Binding DeployButtonFg}" 
+                                        FontSize="12" Padding="8,4" CornerRadius="4"
+                                        HorizontalAlignment="Left" Cursor="Hand">
+                                    <Button.Transitions>
+                                        <Transitions>
+                                            <BrushTransition Property="Background" Duration="0:0:0.2"/>
+                                            <BrushTransition Property="Foreground" Duration="0:0:0.2"/>
+                                        </Transitions>
+                                    </Button.Transitions>
+                                </Button>
+                            </StackPanel>
+                        </Border>
                     </DockPanel>
                 </Border>
                 

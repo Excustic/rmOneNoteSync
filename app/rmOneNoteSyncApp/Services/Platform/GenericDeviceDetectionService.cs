@@ -11,8 +11,8 @@ namespace rmOneNoteSyncApp.Services.Platform;
 /// </summary>
 public class GenericDeviceDetectionService : DeviceDetectionServiceBase
 {
-    public GenericDeviceDetectionService(ILogger<GenericDeviceDetectionService> logger, IDatabaseService databaseService)
-        : base(logger, databaseService)
+    public GenericDeviceDetectionService(ILogger<GenericDeviceDetectionService> logger, IDatabaseService databaseService, ISshService sshService)
+        : base(logger, databaseService, sshService)
     {
         logger.LogWarning("Using generic device detection - platform-specific features unavailable");
     }

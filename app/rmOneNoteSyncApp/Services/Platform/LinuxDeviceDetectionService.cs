@@ -15,8 +15,8 @@ public class LinuxDeviceDetectionService : DeviceDetectionServiceBase
 {
     private FileSystemWatcher? _udevWatcher;
 
-    public LinuxDeviceDetectionService(ILogger<LinuxDeviceDetectionService> logger, IDatabaseService databaseService)
-        : base(logger, databaseService)
+    public LinuxDeviceDetectionService(ILogger<LinuxDeviceDetectionService> logger, IDatabaseService databaseService, ISshService sshService)
+        : base(logger, databaseService, sshService)
     {
     }
 

@@ -31,7 +31,7 @@ public class SoftwareUpdateService : ISoftwareUpdateService
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
             string currentVersion = versionInfo.Split('+')[0];
 
-            bool isUpdateAvailable = latestTag != currentVersion && currentVersion != "0.0.0-PLACEHOLDER";
+            bool isUpdateAvailable = latestTag != currentVersion;
 
             return (isUpdateAvailable, release.tag_name, release.html_url);
         }

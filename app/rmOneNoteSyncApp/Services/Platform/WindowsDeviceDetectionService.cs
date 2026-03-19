@@ -11,7 +11,7 @@ namespace rmOneNoteSyncApp.Services.Platform;
 /// <summary>
 /// Windows-specific implementation using WMI for better USB device detection
 /// </summary>
-public class WindowsDeviceDetectionService(ILogger<WindowsDeviceDetectionService> logger, IDatabaseService databaseService) : DeviceDetectionServiceBase(logger, databaseService)
+public class WindowsDeviceDetectionService(ILogger<WindowsDeviceDetectionService> logger, IDatabaseService databaseService, ISshService sshService) : DeviceDetectionServiceBase(logger, databaseService, sshService)
 {
     private ManagementEventWatcher? _usbWatcher;
 

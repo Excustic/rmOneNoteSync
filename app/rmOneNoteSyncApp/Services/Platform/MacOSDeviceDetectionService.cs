@@ -13,8 +13,8 @@ namespace rmOneNoteSyncApp.Services.Platform;
 /// </summary>
 public class MacOSDeviceDetectionService : DeviceDetectionServiceBase
 {
-    public MacOSDeviceDetectionService(ILogger<MacOSDeviceDetectionService> logger, IDatabaseService databaseService)
-        : base(logger, databaseService)
+    public MacOSDeviceDetectionService(ILogger<MacOSDeviceDetectionService> logger, IDatabaseService databaseService, ISshService sshService)
+        : base(logger, databaseService, sshService)
     {
     }
 

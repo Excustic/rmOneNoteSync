@@ -18,8 +18,10 @@ public partial class SettingsViewModel : ViewModelBase
     private readonly ISshService _sshService;
     private readonly IStartupService _startupService;
     private readonly ISyncService _syncService;
+    private readonly IOneNoteAuthService _oneNoteAuthService;
     private readonly IConfigurationProviderService _configProvider;
     private readonly ILogger<SettingsViewModel>? _logger;
+
     private SyncConfiguration? _configuration;
 
     [ObservableProperty]
@@ -53,13 +55,28 @@ public partial class SettingsViewModel : ViewModelBase
     private string _deviceInfo = "No device connected";
     [ObservableProperty]
     private bool _runOnStartup;
-    public SettingsViewModel(IDatabaseService databaseService, ISshService sshService, ISyncService syncService, IConfigurationProviderService configProvider, IStartupService startupService)
+    [ObservableProperty]
+    private bool _isOneNoteAuthenticated;
+    private bool _isDeviceCacheClearing;
+    [ObservableProperty] private string _clearDeviceCacheButtonText = "Clear Device Sync Cache";
+    [ObservableProperty] private string _clearDeviceCacheButtonBg = "#f3f4f6"; // Default Light Gray
+    [ObservableProperty] private string _clearDeviceCacheButtonFg = "#374151"; // Default Dark Text
+    private bool _isClearingCache;
+    [ObservableProperty] private string _clearCacheButtonText = "Clear DB Cache";
+    [ObservableProperty] private string _clearCacheButtonBg = "#f3f4f6"; // Default Light Gray
+    [ObservableProperty] private string _clearCacheButtonFg = "#374151"; // Default Dark Text
+    public SettingsViewModel(IDatabaseService databaseService,
+        ISshService sshService, ISyncService syncService,
+        IConfigurationProviderService configProvider,
+        IStartupService startupService,
+        IOneNoteAuthService oneNoteAuthService)
     {
         _databaseService = databaseService;
         _sshService = sshService;
         _syncService = syncService;
         _configProvider = configProvider;
         _startupService = startupService;
+        _oneNoteAuthService = oneNoteAuthService;
 
         try
         {
@@ -70,6 +87,11 @@ public partial class SettingsViewModel : ViewModelBase
         _runOnStartup = _startupService.IsStartupEnabled();
         _sshService.OnConnectionChanged += SshServiceOnConnectionChanged;
         SshServiceOnConnectionChanged(this, _sshService.IsConnected);
+        _oneNoteAuthService.AuthenticationStateChanged += (s, e) =>
+        {
+            IsOneNoteAuthenticated = _oneNoteAuthService.IsAuthenticated;
+        };
+        IsOneNoteAuthenticated = _oneNoteAuthService.IsAuthenticated;
         // Load configuration
         Task.Run(LoadSettingsAsync);
     }
@@ -120,6 +142,67 @@ public partial class SettingsViewModel : ViewModelBase
             CacheRetentionDays = config.CacheRetentionDays;
             KeepLocalCopies = config.KeepLocalCopies;
         }
+    }
+    [RelayCommand]
+    private async Task SignInOneNoteAsync()
+    {
+        await _oneNoteAuthService.SignInAsync();
+    }
+    [RelayCommand]
+    private async Task SignOutOneNoteAsync()
+    {
+        await _oneNoteAuthService.SignOutAsync();
+
+        // The Nuclear Option: Force delete the file just in case MSAL serialization fails
+        string cacheFilePath = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "rmOneNoteSyncApp", "msalcache.bin");
+
+        if (System.IO.File.Exists(cacheFilePath))
+        {
+            System.IO.File.Delete(cacheFilePath);
+        }
+    }
+    // AllowConcurrentExecutions stops Avalonia from turning the button gray
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task ClearDeviceCacheAsync()
+    {
+        // Prevent double-clicks and ensure we are actually connected
+        if (_isDeviceCacheClearing || !_sshService.IsConnected) return;
+        _isDeviceCacheClearing = true;
+
+        // 1. Loading State
+        ClearDeviceCacheButtonText = "Clearing...";
+        ClearDeviceCacheButtonBg = "#fef08a"; // Yellow
+        ClearDeviceCacheButtonFg = "#854d0e";
+
+        try
+        {
+            // We use 'rm -f' so the command doesn't crash if the file is already gone
+            await _sshService.ExecuteCommandAsync("rm -f /home/root/onenote-sync/cache/.sync_cache");
+
+            // 2. Success State
+            ClearDeviceCacheButtonText = "✅ Cache Cleared";
+            ClearDeviceCacheButtonBg = "#16a34a"; // Green
+            ClearDeviceCacheButtonFg = "#ffffff";
+        }
+        catch
+        {
+            // 3. Failed State (e.g., if SSH connection suddenly dropped)
+            ClearDeviceCacheButtonText = "❌ Failed";
+            ClearDeviceCacheButtonBg = "#ef4444"; // Red
+            ClearDeviceCacheButtonFg = "#ffffff";
+        }
+
+        // Wait 2.5 seconds for the user to read the success/fail message
+        await Task.Delay(2500);
+
+        // 4. Revert to Default State
+        ClearDeviceCacheButtonText = "Clear Device Sync Cache";
+        ClearDeviceCacheButtonBg = "#f3f4f6";
+        ClearDeviceCacheButtonFg = "#374151";
+
+        _isDeviceCacheClearing = false;
     }
 
     [RelayCommand]
@@ -221,13 +304,48 @@ public partial class SettingsViewModel : ViewModelBase
         }
     }
 
-    [RelayCommand]
+    // AllowConcurrentExecutions stops Avalonia from turning the button gray
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ClearCacheAsync()
     {
-        await _databaseService.ClearCacheAsync();
-        _logger?.LogInformation("Cache cleared");
-    }
+        // Prevent double-clicks and ensure we are actually connected
+        if (_isClearingCache || !_sshService.IsConnected) return;
+        _isClearingCache = true;
 
+        // 1. Loading State
+        ClearCacheButtonText = "Clearing...";
+        ClearCacheButtonBg = "#fef08a"; // Yellow
+        ClearCacheButtonFg = "#854d0e";
+
+        try
+        {
+            // We use 'rm -f' so the command doesn't crash if the file is already gone
+            await _databaseService.ClearCacheAsync();
+            _logger?.LogInformation("Database cache cleared");
+
+            // 2. Success State
+            ClearCacheButtonText = "✅ Cache Cleared";
+            ClearCacheButtonBg = "#16a34a"; // Green
+            ClearCacheButtonFg = "#ffffff";
+        }
+        catch
+        {
+            // 3. Failed State (e.g., if SSH connection suddenly dropped)
+            ClearCacheButtonText = "❌ Failed";
+            ClearCacheButtonBg = "#ef4444"; // Red
+            ClearCacheButtonFg = "#ffffff";
+        }
+
+        // Wait 2.5 seconds for the user to read the success/fail message
+        await Task.Delay(2500);
+
+        // 4. Revert to Default State
+        ClearCacheButtonText = "Clear Device Sync Cache";
+        ClearCacheButtonBg = "#f3f4f6";
+        ClearCacheButtonFg = "#374151";
+
+        _isClearingCache = false;
+    }
     [RelayCommand]
     private async Task CleanupOldCacheAsync()
     {
@@ -245,25 +363,8 @@ public partial class SettingsViewModel : ViewModelBase
 
             _logger?.LogInformation("Restarting reMarkable sync services");
 
-            // Stop the services first
-            await _sshService.ExecuteCommandAsync("systemctl stop onenote-sync-watcher");
-            await _sshService.ExecuteCommandAsync("systemctl stop onenote-sync-httpclient");
-
-            // Wait a moment for services to fully stop
-            await Task.Delay(2000);
-
-            // Start the services again
-            await _sshService.ExecuteCommandAsync("systemctl start onenote-sync-watcher");
-            await _sshService.ExecuteCommandAsync("systemctl start onenote-sync-httpclient");
-
-            // Wait for services to start
-            await Task.Delay(2000);
-
-            // Check service status
-            var watcherStatus = await _sshService.CheckServiceStatusAsync("onenote-sync-watcher");
-            var httpClientStatus = await _sshService.CheckServiceStatusAsync("onenote-sync-httpclient");
-
-            if (watcherStatus && httpClientStatus)
+            var res = await _sshService.RestartServicesAsync();
+            if (res)
             {
                 ServiceStatus = "Services running";
                 _logger?.LogInformation("Services restarted successfully");
