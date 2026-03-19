@@ -2,7 +2,6 @@ name: Build and Package App
 
 on:
   push:
-    branches: [ "main", "fix-windows-installer" ]
     tags:
       - 'v*'
   workflow_dispatch:
@@ -48,7 +47,7 @@ jobs:
     - name: Publish Linux (Portable)
       run: |
         dotnet publish app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj -c Release -r linux-x64 -p:PublishSingleFile=true --self-contained true -o ./artifacts/linux
-        cp install.sh ./artifacts/linux/
+        cp install.sh uninstall.sh ./artifacts/linux/
         cp -r app/rmOneNoteSyncApp/Assets ./artifacts/linux/
 
     - name: Build Ubuntu/Debian Package (.deb)

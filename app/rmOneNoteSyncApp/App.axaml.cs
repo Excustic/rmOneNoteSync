@@ -1,9 +1,9 @@
 using System;
+using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using Microsoft.Extensions.DependencyInjection;
 using rmOneNoteSyncApp.ViewModels;
 using rmOneNoteSyncApp.Views;
 
@@ -30,8 +30,13 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // Read the Informational Version and strip the Git Hash if it exists
+            string versionInfo = Assembly.GetExecutingAssembly()
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
+            string cleanVersion = versionInfo.Split('+')[0];
+
             desktop.MainWindow = new MainWindow();
-            desktop.MainWindow.Title = "reMarkable OneNote Sync v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            desktop.MainWindow.Title = $"reMarkable OneNote Sync v{cleanVersion}";
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             DataContext = new ApplicationViewModel();
         }

@@ -10,6 +10,7 @@ mkdir -p ~/.config/autostart
 # 2. Copy the binaries
 cp -r ./* ~/.local/bin/rmOneNoteSync/
 chmod +x ~/.local/bin/rmOneNoteSync/rmOneNoteSyncApp
+chmod +x ~/.local/bin/rmOneNoteSync/uninstall.sh
 
 # 3. Copy the Icon
 cp Assets/app-icon.png ~/.local/share/icons/hicolor/256x256/apps/rmOneNoteSyncApp.png

@@ -25,16 +25,19 @@ public class SoftwareUpdateService : ISoftwareUpdateService
             if (release == null || string.IsNullOrEmpty(release.tag_name)) return (false, "", "");
 
             string latestTag = release.tag_name.Replace("v", "");
-            string currentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
 
-            // Basic string comparison (You can use Version.TryParse for more robust comparison)
-            bool isUpdateAvailable = latestTag != currentVersion && latestTag != "0.0.0-PLACEHOLDER";
+            // Grab the exact string from the csproj (ignoring the .NET commit hash)
+            string versionInfo = Assembly.GetExecutingAssembly()
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
+            string currentVersion = versionInfo.Split('+')[0];
+
+            bool isUpdateAvailable = latestTag != currentVersion && currentVersion != "0.0.0-PLACEHOLDER";
 
             return (isUpdateAvailable, release.tag_name, release.html_url);
         }
         catch
         {
-            return (false, "", ""); // Fail silently if offline or API rate limited
+            return (false, "", "");
         }
     }
 
