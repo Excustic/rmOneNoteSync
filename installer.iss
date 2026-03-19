@@ -13,6 +13,7 @@ AppPublisherURL=https://github.com/Excustic/rmOneNoteSync
 AppSupportURL=https://github.com/Excustic/rmOneNoteSync/issues
 AppUpdatesURL=https://github.com/Excustic/rmOneNoteSync/releases
 SetupIconFile=app\rmOneNoteSyncApp\Assets\app-icon.ico
+PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 ; Where it installs by default (C:\Program Files\rmOneNoteSyncApp)
@@ -41,9 +42,10 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 ; 1. Tell HTTP.sys to let ANY standard user open port 8080 without Admin rights
-Filename: "netsh"; Parameters: "http add urlacl url=http://*:8080/ user=EVERYONE"; Flags: runhidden
+Filename: "netsh"; Parameters: "http add urlacl url="http://localhost:8080/" user="NT AUTHORITY\Authenticated Users""; Flags: runhidden
+
 ; 2. Add the Windows Firewall exception so it doesn't block incoming tablet syncs
-Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""{#MyAppName}"" dir=in action=allow protocol=TCP localport=8080"; Flags: runhidden
+Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""{#MyAppName}"" dir=in action=allow protocol=TCP localport=8080 profile=private"; Flags: runhidden
 
 [UninstallRun]
 ; Clean up our mess when the user uninstalls the app!

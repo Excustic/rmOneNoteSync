@@ -55,7 +55,8 @@ public class SyncServerService : ISyncServerService
         try
         {
             _listener = new HttpListener();
-            _listener.Prefixes.Add($"http://+:{port}/");
+            _listener.Prefixes.Clear();
+            _listener.Prefixes.Add($"http://localhost:{port}/");
 
             // Try to start the listener
             _listener.Start();
