@@ -24,6 +24,15 @@
         <Content Include="rmc-linux-x64" Link="rmc">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
+        <Content Include="Assets\rmOneNoteSync.desktop">
+            <LinuxPath>/usr/share/applications/rmOneNoteSync.desktop</LinuxPath>
+        </Content>
+        <Content Include="Assets\rmOneNoteSync.desktop">
+            <LinuxPath>/etc/xdg/autostart/rmOneNoteSync.desktop</LinuxPath>
+        </Content>
+        <Content Include="Assets\app-icon.png">
+            <LinuxPath>/usr/share/icons/hicolor/256x256/apps/rmOneNoteSyncApp.png</LinuxPath>
+        </Content>
     </ItemGroup>
 
     <ItemGroup>

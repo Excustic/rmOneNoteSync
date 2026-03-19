@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=reMarkable OneNote Sync
+Comment=Synchronize reMarkable notebooks to OneNote
+Exec=rmOneNoteSyncApp
+Icon=rmOneNoteSyncApp
+Categories=Office;Utility;
+Terminal=false

@@ -46,17 +46,20 @@ jobs:
       run: dotnet publish app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj -c Release -r win-x64 -p:PublishSingleFile=true --self-contained true -o ./artifacts/windows
 
     - name: Publish Linux (Portable)
-      run: dotnet publish app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj -c Release -r linux-x64 -p:PublishSingleFile=true --self-contained true -o ./artifacts/linux
+      run: |
+        dotnet publish app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj -c Release -r linux-x64 -p:PublishSingleFile=true --self-contained true -o ./artifacts/linux
+        cp install.sh ./artifacts/linux/
+        cp -r app/rmOneNoteSyncApp/Assets ./artifacts/linux/
+
+    - name: Build Ubuntu/Debian Package (.deb)
+      run: dotnet msbuild app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj /t:CreateDeb /p:TargetFramework=net9.0 /p:RuntimeIdentifier=linux-x64 /p:Configuration=Release /p:SelfContained=true
+
+    - name: Build Fedora/RedHat Package (.rpm)
+      run: dotnet msbuild app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj /t:CreateRpm /p:TargetFramework=net9.0 /p:RuntimeIdentifier=linux-x64 /p:Configuration=Release /p:SelfContained=true
 
     - name: Publish macOS (Portable)
       run: dotnet publish app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj -c Release -r osx-x64 -p:PublishSingleFile=true --self-contained true -o ./artifacts/macos
 
-    - name: Build Ubuntu/Debian Package (.deb)
-      run: dotnet msbuild app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj /t:CreateDeb /p:TargetFramework=net9.0 /p:RuntimeIdentifier=linux-x64 /p:Configuration=Release
-
-    - name: Build Fedora/RedHat Package (.rpm)
-      run: dotnet msbuild app/rmOneNoteSyncApp/rmOneNoteSyncApp.csproj /t:CreateRpm /p:TargetFramework=net9.0 /p:RuntimeIdentifier=linux-x64 /p:Configuration=Release
-      
     - name: Collect Linux Packages
       run: |
         mkdir -p ./artifacts/linux-packages

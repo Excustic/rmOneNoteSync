@@ -15,14 +15,29 @@ public class RmConverterService : IRmConverterService
     public RmConverterService(ILogger<RmConverterService> logger)
     {
         _logger = logger;
-        // Default relative to app directory or configurable
-        string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "rmOneNoteSyncApp");
-        _rmcExecutablePath = Path.Combine(appData, "rmc");
 
-        // On Linux, it might not have an extension. On Windows, it would be rmc.exe
-        if (OperatingSystem.IsWindows() && !_rmcExecutablePath.EndsWith(".exe"))
+        string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "rmOneNoteSyncApp");
+        Directory.CreateDirectory(appData);
+
+        string binaryName = OperatingSystem.IsWindows() ? "rmc.exe" : "rmc";
+        _rmcExecutablePath = Path.Combine(appData, binaryName);
+
+        // The binary bundled by GitHub Actions sits right next to the app executable
+        string bundledPath = Path.Combine(AppContext.BaseDirectory, binaryName);
+
+        if (File.Exists(bundledPath))
         {
-            _rmcExecutablePath += ".exe";
+            // Always overwrite to ensure updates to the app also update the local rmc binary
+            File.Copy(bundledPath, _rmcExecutablePath, overwrite: true);
+
+            // Restore executable permissions on Linux/macOS after copying
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(_rmcExecutablePath,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                    UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                    UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            }
         }
     }
 
