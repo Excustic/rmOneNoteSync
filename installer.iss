@@ -48,3 +48,17 @@ Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""{#MyAppName
 ; Clean up our mess when the user uninstalls the app!
 Filename: "netsh"; Parameters: "http delete urlacl url=http://*:8080/"; Flags: runhidden
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""{#MyAppName}"""; Flags: runhidden
+
+[Code]
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  // Trigger this right after the main uninstallation is finished
+  if CurUninstallStep = usPostUninstall then
+  begin
+    if MsgBox('Do you want to permanently delete your local application data? (This includes your database, sync history, and OneNote login)', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = idYes then
+    begin
+      // '{localappdata}' maps to C:\Users\Username\AppData\Local
+      DelTree(ExpandConstant('{localappdata}\{#MyAppName}'), True, True, True);
+    end;
+  end;
+end;
