@@ -18,12 +18,10 @@ namespace rmOneNoteSyncApp.Services
     public class DeploymentService(
         ILogger<DeploymentService> logger,
         IConfigurationProviderService configProvider,
-        IDeviceDetectionService deviceDetectionService,
         ISshService sshService) : IDeploymentService
     {
         private readonly ILogger<DeploymentService> _logger = logger;
         private readonly IConfigurationProviderService _configProvider = configProvider;
-        private readonly IDeviceDetectionService _deviceDetectionService = deviceDetectionService;
         private readonly ISshService _sshService = sshService;
         public static readonly string REMOTE_BASE_PATH = "/home/root/onenote-sync";
 
@@ -56,11 +54,14 @@ namespace rmOneNoteSyncApp.Services
 
                     result.InstalledVersion = ExtractVersionFromJson(versionContent);
                     result.IsInstalled = true;
+                    ReportProgress("Version found: " + result.InstalledVersion, 0.2, DeploymentStage.Checking);
+
                 }
                 catch
                 {
                     result.IsInstalled = true;
                     result.InstalledVersion = "Unknown";
+                    ReportProgress("Version not found", 0.2, DeploymentStage.Checking);
                 }
 
                 // Check component status
@@ -80,7 +81,7 @@ namespace rmOneNoteSyncApp.Services
             return result;
         }
 
-        public async Task<DeploymentResult> DeployAsync()
+        public async Task<DeploymentResult> DeployAsync(DeviceInfo device)
         {
             DeploymentResult result = new();
 
@@ -97,11 +98,6 @@ namespace rmOneNoteSyncApp.Services
                 ReportProgress("Directory structure created", 0.3, DeploymentStage.PreparingFiles);
 
                 // Step 3: Download binaries
-                DeviceInfo? device;
-                if ((device = _deviceDetectionService.CurrentDevice) == null)
-                {
-                    throw new InvalidOperationException("No device selected");
-                }
                 string localExtractedDir = await DownloadAndExtractLatestReleaseAsync(device);
                 ReportProgress("Binaries downloaded and extracted", 0.4, DeploymentStage.DownloadingBinaries);
 
@@ -382,7 +378,7 @@ namespace rmOneNoteSyncApp.Services
             });
         }
 
-        public async Task<DeploymentResult> UpdateAsync()
+        public async Task<DeploymentResult> UpdateAsync(DeviceInfo device)
         {
             // For updates, we backup config, deploy new version, restore config
             string backupPath = Path.GetTempFileName();
@@ -390,7 +386,7 @@ namespace rmOneNoteSyncApp.Services
             try
             {
                 _ = await BackupConfigurationAsync(backupPath);
-                DeploymentResult result = await DeployAsync();
+                DeploymentResult result = await DeployAsync(device);
                 _ = await RestoreConfigurationAsync(backupPath);
                 return result;
             }

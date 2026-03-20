@@ -89,12 +89,13 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
             if (networkInterface != null && await PingDeviceAsync(REMARKABLE_USB_IP))
             {
                 // Verify we can ping the device on the USB IP
-                if (_currentDevice == null || _currentDevice.ConnectionType != DeviceConnectionType.USB || _currentDevice.MacAddress != config?.DeviceMacAddress)
+                if (_currentDevice == null || _currentDevice.ConnectionType != DeviceConnectionType.USB || (_currentDevice?.Model?.Equals("Unknown", StringComparison.OrdinalIgnoreCase) == true && config?.DevicePassword.Equals(string.Empty) == false))
                 {
                     var deviceInfo = new Dictionary<string, string>();
-                    if ((!_sshService.IsConnected || _sshService.CurrentIp != REMARKABLE_USB_IP) && IncludeSSHConnectionCheck)
+                    if (IncludeSSHConnectionCheck)
                     {
-                        await _sshService.ConnectAsync(REMARKABLE_USB_IP, config?.DevicePassword);
+                        if ((!_sshService.IsConnected || _sshService.CurrentIp != REMARKABLE_USB_IP) && config?.DevicePassword != null)
+                            await _sshService.ConnectAsync(REMARKABLE_USB_IP, config?.DevicePassword);
                         deviceInfo = await _sshService.GetDeviceInfoAsync();
                     }
                     // New USB connection

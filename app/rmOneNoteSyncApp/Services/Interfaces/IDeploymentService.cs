@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using rmOneNoteSyncApp.Models;
 
 namespace rmOneNoteSyncApp.Services.Interfaces;
 
@@ -12,8 +13,8 @@ public interface IDeploymentService
     event EventHandler<DeploymentProgressEventArgs>? DeploymentProgress;
 
     Task<DeploymentResult> CheckInstallationAsync();
-    Task<DeploymentResult> DeployAsync();
-    Task<DeploymentResult> UpdateAsync();
+    Task<DeploymentResult> DeployAsync(DeviceInfo device);
+    Task<DeploymentResult> UpdateAsync(DeviceInfo device);
     Task<DeploymentResult> UninstallAsync();
     Task<bool> BackupConfigurationAsync(string localPath);
     Task<bool> RestoreConfigurationAsync(string localPath);
@@ -28,6 +29,7 @@ public class DeploymentProgressEventArgs : EventArgs
 
 public enum DeploymentStage
 {
+    Idle,
     Checking,
     PreparingFiles,
     DownloadingBinaries,

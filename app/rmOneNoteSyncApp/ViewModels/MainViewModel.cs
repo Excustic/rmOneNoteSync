@@ -81,6 +81,12 @@ public partial class MainViewModel : ViewModelBase
             }
         }
     }
+    [ObservableProperty]
+    private double _deployProgress = 0.0;
+    [ObservableProperty]
+    private string _deployMessage = "";
+    [ObservableProperty]
+    private DeploymentStage _deployStage = DeploymentStage.Idle;
 
     [ObservableProperty] private double _deployBannerOpacity = 0.0;
     [ObservableProperty] private string _deployButtonText = "🔨 Fix it";
@@ -188,6 +194,7 @@ public partial class MainViewModel : ViewModelBase
 
         // Subscribe to device connection events
         _detectionService.DeviceConnectionChanged += OnConnectionChanged;
+        _deploymentService.DeploymentProgress += OnDeploymentProgress;
 
         _oneNoteAuth = oneNoteAuth;
 
@@ -203,6 +210,13 @@ public partial class MainViewModel : ViewModelBase
                 OneNoteStatusText = $"Signed in as {silentAuth.UserName}";
             }
         });
+    }
+
+    private void OnDeploymentProgress(object? sender, DeploymentProgressEventArgs e)
+    {
+        DeployProgress = e.Progress;
+        DeployMessage = e.Message;
+        DeployStage = e.Stage;
     }
 
     private async void CheckUpdates()
@@ -329,11 +343,11 @@ public partial class MainViewModel : ViewModelBase
         DeployButtonBg = "#fef08a";
         DeployButtonFg = "#854d0e";
 
-        var res = await _deploymentService.DeployAsync();
+        var res = await _deploymentService.DeployAsync(_detectionService.CurrentDevice);
 
         if (res.IsInstalled)
         {
-            await _sshService.RestartServicesAsync();
+            await _sshService.RestartServiceAsync();
 
             DeployButtonText = "✅ Done";
             DeployButtonBg = "#16a34a";
@@ -396,6 +410,9 @@ public partial class MainViewModel : ViewModelBase
             IsAuthenticating = true;
             AuthenticationError = "";
 
+            // Check SSH connection along with ping from now on
+            _detectionService.IncludeSSHConnectionCheck = true;
+
             var connected = await _sshService.ConnectAsync(CurrentDevice.IpAddress, DevicePassword);
 
             if (connected)
@@ -404,7 +421,7 @@ public partial class MainViewModel : ViewModelBase
                 DeviceStatusText = "Connected and authenticated";
 
                 // Enable Wi-Fi
-                await _sshService.EnableWifiOverSshAsync();
+                var EnableWifi = await _sshService.EnableWifiOverSshAsync();
 
                 // Fetch MAC address
                 _fetchedMacAddress = await _sshService.GetMacAddressAsync() ?? "Unknown";
@@ -417,20 +434,56 @@ public partial class MainViewModel : ViewModelBase
                     .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
                     .InformationalVersion?.Split('+')[0] ?? "0.0.0";
 
+                // Save configuration
+                var config = new SyncConfiguration
+                {
+                    DeviceIp = CurrentDevice?.IpAddress ?? "10.11.99.1",
+                    DevicePassword = this.DevicePassword,
+                    DeviceMacAddress = _fetchedMacAddress,
+                    EnableWifiSync = EnableWifi,
+                    AutoSync = true
+                };
+                await _databaseService.SaveConfigurationAsync(config);
+                var deviceInfo = await _sshService.GetDeviceInfoAsync();
+                DeviceInfo dev = new()
+                {
+                    Model = deviceInfo["Model"]
+                };
                 if (!installStatus.IsInstalled)
                 {
                     _logger.LogInformation("No installation found on device. Deploying fresh daemon...");
-                    await _deploymentService.DeployAsync();
-                    await _sshService.RestartServicesAsync();
+                    await _deploymentService.DeployAsync(dev);
+                    await _sshService.RestartServiceAsync();
                 }
                 else if (installStatus.InstalledVersion != currentAppVersion)
                 {
                     _logger.LogInformation("Tablet daemon is outdated ({Installed} vs {Current}). Triggering update...",
                         installStatus.InstalledVersion, currentAppVersion);
+                    OnDeploymentProgress(this, new DeploymentProgressEventArgs()
+                    {
+                        Stage = DeploymentStage.Checking,
+                        Message = "Old version detected. Updating...",
+                        Progress = 0
+                    });
 
-                    await _deploymentService.UpdateAsync();
-                    await _sshService.RestartServicesAsync();
+                    await _deploymentService.UpdateAsync(dev);
+                    await _sshService.RestartServiceAsync();
 
+                }
+                else
+                {
+                    OnDeploymentProgress(this, new DeploymentProgressEventArgs()
+                    {
+                        Stage = DeploymentStage.Checking,
+                        Message = "Version is up to date!",
+                        Progress = 1
+                    });
+
+                    if (OneNoteStatusText.Contains("Signed in as"))
+                    {
+                        OnPropertyChanged(nameof(CanCompleteSetup));
+                        CompleteSetupCommand.NotifyCanExecuteChanged();
+                    }
                 }
             }
             else
@@ -485,8 +538,11 @@ public partial class MainViewModel : ViewModelBase
             _logger.LogError(ex, "OneNote sign in error");
         }
 
-        OnPropertyChanged(nameof(CanCompleteSetup));
-        CompleteSetupCommand.NotifyCanExecuteChanged();
+        if (DeployStage == DeploymentStage.Complete)
+        {
+            OnPropertyChanged(nameof(CanCompleteSetup));
+            CompleteSetupCommand.NotifyCanExecuteChanged();
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanCompleteSetup))]
@@ -497,20 +553,6 @@ public partial class MainViewModel : ViewModelBase
         {
             _logger.LogWarning("Completing setup in TEST MODE");
         }
-
-        // Save configuration
-        var config = new SyncConfiguration
-        {
-            DeviceIp = CurrentDevice?.IpAddress ?? "10.11.99.1",
-            DevicePassword = this.DevicePassword,
-            DeviceMacAddress = _fetchedMacAddress,
-            EnableWifiSync = true,
-            AutoSync = true
-        };
-        await _databaseService.SaveConfigurationAsync(config);
-
-        // Check SSH connection along with ping from now on
-        _detectionService.IncludeSSHConnectionCheck = true;
 
         // Wait briefly to allow services to transition state
         await Task.Delay(500);

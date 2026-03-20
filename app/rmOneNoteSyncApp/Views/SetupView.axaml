@@ -131,6 +131,19 @@
                                Padding="20,10"
                                FontSize="16"
                                Classes="primary"/>
+
+                        <!-- Deployment Progress -->
+                        <Border IsVisible="{Binding DeployProgress, Converter={StaticResource GreaterThanConverter}, ConverterParameter=0.0}"
+                                Background="#f3f4f6"
+                                CornerRadius="8"
+                                Padding="16"
+                                Margin="0,20,0,0">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Sync Firmware Deployment" FontSize="16" FontWeight="SemiBold"/>
+                                <ProgressBar Value="{Binding DeployProgress}" Minimum="0" Maximum="1"/>
+                                <TextBlock Text="{Binding DeployMessage}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </Border>
             </StackPanel>

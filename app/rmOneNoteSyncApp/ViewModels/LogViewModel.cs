@@ -178,7 +178,28 @@ public partial class LogsViewModel : ViewModelBase
             Task.Run(() => LoadLogContentAsync(value));
         }
     }
+    private async Task<string> ReadTailAsync(string filePath, int maxLines)
+    {
+        // A Queue perfectly handles the "first in, first out" rolling window
+        var lines = new Queue<string>(maxLines);
 
+        // FileShare.ReadWrite is crucial here so we don't lock out the logger!
+        using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(fs);
+
+        string? line;
+        while ((line = await reader.ReadLineAsync()) != null)
+        {
+            // If we hit our limit, push the oldest line out before adding the new one
+            if (lines.Count >= maxLines)
+            {
+                lines.Dequeue();
+            }
+            lines.Enqueue(line);
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
     private async Task LoadLogContentAsync(LogFile logFile)
     {
         try
@@ -187,13 +208,12 @@ public partial class LogsViewModel : ViewModelBase
 
             if (logFile.IsLocal)
             {
-                // Read local file
-                LogContent = await File.ReadAllTextAsync(logFile.FullPath);
+                // Efficiently read only the last 1000 lines without locking the file
+                LogContent = await ReadTailAsync(logFile.FullPath, 1000);
             }
             else
             {
                 // Read remote file via SSH
-                // Use tail for large files to get recent content
                 var command = $"tail -n 1000 '{logFile.FullPath}'";
                 LogContent = await _sshService.ExecuteCommandAsync(command);
             }

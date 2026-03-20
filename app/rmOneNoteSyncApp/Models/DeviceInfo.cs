@@ -22,7 +22,7 @@ public class DeviceInfo
         get => _model; internal set
         {
             string m = value?.ToLower() ?? "";
-            string variant = "rm1";
+            string variant = "unknown";
             if (m.Contains("ferrari"))
                 variant = "ferrari";
             else if (m.Contains("chiappa"))

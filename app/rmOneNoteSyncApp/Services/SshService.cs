@@ -221,8 +221,15 @@ public class SshService(ILogger<SshService> logger) : ISshService, IDisposable
 
         await Task.Run(() =>
         {
-            using var fileStream = File.OpenRead(localPath);
-            _sftpClient.UploadFile(fileStream, remotePath, true);
+            try
+            {
+                using var fileStream = File.OpenRead(localPath);
+                _sftpClient.UploadFile(fileStream, remotePath, true);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to upload file");
+            }
         });
 
         logger.LogDebug("Upload completed successfully");
@@ -353,7 +360,7 @@ public class SshService(ILogger<SshService> logger) : ISshService, IDisposable
         return macAddressOutput;
     }
 
-    public async Task<bool> RestartServicesAsync()
+    public async Task<bool> RestartServiceAsync()
     {
         // Stop the services first
         await ExecuteCommandAsync("systemctl stop onenote-sync-watcher");

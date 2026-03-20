@@ -87,6 +87,7 @@
         <converters:EqualityConverter x:Key="EqualityConverter"/>
         <converters:ConnectionStateToColorConverter x:Key="ConnectionStateToColorConverter"/>
         <converters:BoolToColorConverter x:Key="BoolToColorConverter"/>
+        <converters:GreaterThanConverter x:Key="GreaterThanConverter"/>
         <converters:BoolToStatusColorConverter x:Key="BoolToStatusColorConverter"/>
         <converters:BoolToStatusBrushConverter x:Key="BoolToStatusBrushConverter"/>
         <converters:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>

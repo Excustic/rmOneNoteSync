@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -9,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using rmOneNoteSyncApp.Models;
 using rmOneNoteSyncApp.Services.Interfaces;
+using rmOneNoteSyncApp.Views;
 
 namespace rmOneNoteSyncApp.ViewModels;
 
@@ -247,60 +250,89 @@ public partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task DisconnectDeviceAsync()
     {
-        try
+        if (App.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            _logger?.LogInformation("Disconnecting device and resetting configuration");
+            var mainWindow = desktop.MainWindow;
 
-            // Disconnect SSH
-            if (_sshService.IsConnected)
+            if (mainWindow == null) return;
+
+            // 3. Set up your dialog
+            var dialog = new ConfirmDialogWindow();
+            var message = """
+            Are you sure you want to disconnect? All data on the device will be erased.
+            Otherwise, please disconnect it first to retain local data.
+            """;
+            var vm = new ConfirmDialogViewModel(dialog, message);
+
+            // Don't forget to attach the ViewModel to the Window!
+            dialog.DataContext = vm;
+
+            // 4. Show the dialog using the mainWindow as the parent
+            var result = await dialog.ShowDialog<bool?>(mainWindow);
+            if (result != true) return;
+
+            try
             {
-                await _sshService.DisconnectAsync();
-            }
+                _logger?.LogInformation("Disconnecting device and resetting configuration");
 
-            // Clear the configuration to force setup screen
-            await _databaseService.ClearCacheAsync();
-
-            // Clear saved configuration
-            var config = await _databaseService.GetConfigurationAsync();
-            if (config != null)
-            {
-                config.DeviceIp = string.Empty;
-                config.DevicePassword = string.Empty;
-                config.ServiceVersion = string.Empty;
-                await _databaseService.SaveConfigurationAsync(config);
-            }
-
-            _logger?.LogInformation("Device disconnected and configuration reset");
-
-            // Navigate back to setup
-            if (App.ServiceProvider?.GetService<MainViewModel>() is { } mainVm)
-            {
-                mainVm.ShowSetupScreen = true;
-                mainVm.ConnectionState = ConnectionState.Disconnected;
-            }
-
-            // Restart the application
-            var currentProcess = Process.GetCurrentProcess();
-            if (currentProcess.MainModule != null)
-            {
-                var exePath = currentProcess.MainModule.FileName;
-                _logger?.LogInformation("Restarting application: {Path}", exePath);
-
-                Process.Start(new ProcessStartInfo
+                // Disconnect SSH
+                if (_sshService.IsConnected)
                 {
-                    FileName = exePath,
-                    UseShellExecute = true
-                });
+                    await _sshService.DisconnectAsync();
+                }
 
-                if (App.Current.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+                // Clear the configuration to force setup screen
+                await _databaseService.ClearCacheAsync();
+
+                // Clear saved configuration
+                var config = await _databaseService.GetConfigurationAsync();
+                if (config != null)
                 {
+                    config.DeviceIp = string.Empty;
+                    config.DevicePassword = string.Empty;
+                    config.ServiceVersion = string.Empty;
+                    await _databaseService.SaveConfigurationAsync(config);
+                }
+
+                // Nuke the device
+                try
+                {
+                    await _sshService.ExecuteCommandAsync("rm -rf /home/root/onenote-sync");
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Failed to erase device data.");
+                }
+
+                _logger?.LogInformation("Device disconnected and configuration reset");
+
+                // Navigate back to setup
+                if (App.ServiceProvider?.GetService<MainViewModel>() is { } mainVm)
+                {
+                    mainVm.ShowSetupScreen = true;
+                    mainVm.ConnectionState = ConnectionState.Disconnected;
+                }
+
+                // Restart the application
+                var currentProcess = Process.GetCurrentProcess();
+                if (currentProcess.MainModule != null)
+                {
+                    var exePath = currentProcess.MainModule.FileName;
+                    _logger?.LogInformation("Restarting application: {Path}", exePath);
+
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = exePath,
+                        UseShellExecute = true
+                    });
+
                     desktop.Shutdown();
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Failed to disconnect device");
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to disconnect device");
+            }
         }
     }
 
@@ -363,7 +395,7 @@ public partial class SettingsViewModel : ViewModelBase
 
             _logger?.LogInformation("Restarting reMarkable sync services");
 
-            var res = await _sshService.RestartServicesAsync();
+            var res = await _sshService.RestartServiceAsync();
             if (res)
             {
                 ServiceStatus = "Services running";

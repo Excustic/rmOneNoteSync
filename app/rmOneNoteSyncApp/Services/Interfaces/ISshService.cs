@@ -43,7 +43,7 @@ public interface ISshService : IDisposable
     /// Restarts the reMarkable sync services
     /// </summary>
     /// <returns>True if services were restarted successfully</returns>
-    Task<bool> RestartServicesAsync();
+    Task<bool> RestartServiceAsync();
 
     /// <summary>
     /// Upload a file to the device
