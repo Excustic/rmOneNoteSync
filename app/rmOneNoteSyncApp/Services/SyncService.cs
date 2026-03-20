@@ -221,6 +221,8 @@ public class SyncService : ISyncService
 
                     result.SuccessfulDocuments++;
                     _logger.LogDebug("Successfully transcoded and uploaded {Path} to OneNote", page.VirtualPath);
+                    PageSyncCompleted?.Invoke(this,
+                        new PageSyncCompletedEventArgs(page, true, errors.LastOrDefault(), oneNoteUrl));
                 }
                 catch (Exception ex)
                 {

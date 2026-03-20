@@ -301,21 +301,27 @@ public partial class MainViewModel : ViewModelBase
             if (e is { IsConnected: true, Device: not null })
             {
                 DeviceStatusText = $"Device detected at {e.Device.IpAddress}";
-                ConnectionStateText = $"{e.Device.ConnectionType} Connected";
-                ConnectionState = ConnectionState.Configured;
+                ConnectionStateText = $"{e.Device.ConnectionType} Detected";
+                ConnectionState = ConnectionState.Detected;
 
                 // Grab the current desktop app version to compare against the tablet
                 string currentAppVersion = Assembly.GetExecutingAssembly()
                     .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
                     .InformationalVersion?.Split('+')[0] ?? "0.0.0";
 
-                if (!ShowSetupScreen)
+                if (DevicePassword != string.Empty)
+                    await ReconnectSSH();
+                if (!ShowSetupScreen && _sshService.IsConnected)
                 {
                     var installationStatus = await _deploymentService.CheckInstallationAsync();
                     NeedsDeployment = _detectionService.CurrentDevice?.SyncVersion == "Not installed" ||
                                         _detectionService.CurrentDevice?.SyncVersion == "Unknown" ||
                                         installationStatus.IsInstalled == false ||
-                                        installationStatus.InstalledVersion != currentAppVersion;
+                                    installationStatus.InstalledVersion != currentAppVersion;
+
+                    DeviceStatusText = $"Connected via {e.Device.ConnectionType} at {e.Device.IpAddress}";
+                    ConnectionStateText = $"{e.Device.ConnectionType} Connected";
+                    ConnectionState = ConnectionState.Configured;
                 }
             }
             else
@@ -328,8 +334,6 @@ public partial class MainViewModel : ViewModelBase
                 NeedsDeployment = false;
             }
 
-            if (DevicePassword != string.Empty)
-                _ = ReconnectSSH();
             OnPropertyChanged(nameof(CanConnect));
         });
     }
