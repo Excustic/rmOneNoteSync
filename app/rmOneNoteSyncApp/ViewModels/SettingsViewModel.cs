@@ -68,6 +68,9 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private string _clearCacheButtonText = "Clear DB Cache";
     [ObservableProperty] private string _clearCacheButtonBg = "#f3f4f6"; // Default Light Gray
     [ObservableProperty] private string _clearCacheButtonFg = "#374151"; // Default Dark Text
+    [ObservableProperty] private string _saveSettingsButtonText = "Save Settings";
+    [ObservableProperty] private string _SaveSettingsButtonBg = "#2563eb"; // Default Light Gray
+    [ObservableProperty] private string _SaveSettingsButtonFg = "#f0f4fe"; // Default Dark Text
     public SettingsViewModel(IDatabaseService databaseService,
         ISshService sshService, ISyncService syncService,
         IConfigurationProviderService configProvider,
@@ -176,7 +179,7 @@ public partial class SettingsViewModel : ViewModelBase
 
         // 1. Loading State
         ClearDeviceCacheButtonText = "Clearing...";
-        ClearDeviceCacheButtonBg = "#fef08a"; // Yellow
+        ClearDeviceCacheButtonBg = "#fef08a";
         ClearDeviceCacheButtonFg = "#854d0e";
 
         try
@@ -186,14 +189,14 @@ public partial class SettingsViewModel : ViewModelBase
 
             // 2. Success State
             ClearDeviceCacheButtonText = "✅ Cache Cleared";
-            ClearDeviceCacheButtonBg = "#16a34a"; // Green
+            ClearDeviceCacheButtonBg = "#16a34a";
             ClearDeviceCacheButtonFg = "#ffffff";
         }
         catch
         {
             // 3. Failed State (e.g., if SSH connection suddenly dropped)
             ClearDeviceCacheButtonText = "❌ Failed";
-            ClearDeviceCacheButtonBg = "#ef4444"; // Red
+            ClearDeviceCacheButtonBg = "#ef4444";
             ClearDeviceCacheButtonFg = "#ffffff";
         }
 
@@ -218,7 +221,17 @@ public partial class SettingsViewModel : ViewModelBase
         _configuration.CacheRetentionDays = CacheRetentionDays;
         _configuration.KeepLocalCopies = KeepLocalCopies;
 
+        // 1. Loading State
+        SaveSettingsButtonText = "Saving...";
+        SaveSettingsButtonBg = "#fef08a";
+        SaveSettingsButtonFg = "#854d0e";
+
         await _databaseService.SaveConfigurationAsync(_configuration);
+
+        // 2. Success State
+        SaveSettingsButtonText = "✅ Settings Saved";
+        SaveSettingsButtonBg = "#16a34a";
+        SaveSettingsButtonFg = "#ffffff";
 
         if (AutoSync)
         {
@@ -244,7 +257,14 @@ public partial class SettingsViewModel : ViewModelBase
             Task.Run(dashboardVm.LoadDashboardDataAsync);
         }
 
-        _logger?.LogInformation("Settings saved and deployed to background workers");
+        await Task.Delay(2000);
+        // 4. Revert to Default State
+        SaveSettingsButtonText = "Save Settings";
+        SaveSettingsButtonBg = "#2563eb";
+        SaveSettingsButtonFg = "#f3f4f6";
+
+        _logger?.LogInformation("Settings saved.");
+
     }
 
     [RelayCommand]
@@ -275,11 +295,6 @@ public partial class SettingsViewModel : ViewModelBase
             {
                 _logger?.LogInformation("Disconnecting device and resetting configuration");
 
-                // Disconnect SSH
-                if (_sshService.IsConnected)
-                {
-                    await _sshService.DisconnectAsync();
-                }
 
                 // Clear the configuration to force setup screen
                 await _databaseService.ClearCacheAsync();
@@ -304,7 +319,11 @@ public partial class SettingsViewModel : ViewModelBase
                     _logger?.LogError(ex, "Failed to erase device data.");
                 }
 
-                _logger?.LogInformation("Device disconnected and configuration reset");
+                // Disconnect SSH
+                if (_sshService.IsConnected)
+                {
+                    await _sshService.DisconnectAsync();
+                }
 
                 // Navigate back to setup
                 if (App.ServiceProvider?.GetService<MainViewModel>() is { } mainVm)
@@ -318,7 +337,7 @@ public partial class SettingsViewModel : ViewModelBase
                 if (currentProcess.MainModule != null)
                 {
                     var exePath = currentProcess.MainModule.FileName;
-                    _logger?.LogInformation("Restarting application: {Path}", exePath);
+                    _logger?.LogDebug("Restarting application: {Path}", exePath);
 
                     Process.Start(new ProcessStartInfo
                     {
@@ -346,7 +365,7 @@ public partial class SettingsViewModel : ViewModelBase
 
         // 1. Loading State
         ClearCacheButtonText = "Clearing...";
-        ClearCacheButtonBg = "#fef08a"; // Yellow
+        ClearCacheButtonBg = "#fef08a";
         ClearCacheButtonFg = "#854d0e";
 
         try
@@ -357,14 +376,14 @@ public partial class SettingsViewModel : ViewModelBase
 
             // 2. Success State
             ClearCacheButtonText = "✅ Cache Cleared";
-            ClearCacheButtonBg = "#16a34a"; // Green
+            ClearCacheButtonBg = "#16a34a";
             ClearCacheButtonFg = "#ffffff";
         }
         catch
         {
             // 3. Failed State (e.g., if SSH connection suddenly dropped)
             ClearCacheButtonText = "❌ Failed";
-            ClearCacheButtonBg = "#ef4444"; // Red
+            ClearCacheButtonBg = "#ef4444";
             ClearCacheButtonFg = "#ffffff";
         }
 
@@ -393,7 +412,7 @@ public partial class SettingsViewModel : ViewModelBase
             IsRestartingService = true;
             ServiceStatus = "Restarting...";
 
-            _logger?.LogInformation("Restarting reMarkable sync services");
+            _logger?.LogDebug("Restarting reMarkable sync services");
 
             var res = await _sshService.RestartServiceAsync();
             if (res)

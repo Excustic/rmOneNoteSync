@@ -37,8 +37,8 @@ public class BoolToColorConverter : IValueConverter
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is bool isTrue && isTrue)
-            return "#10b981"; // Green
-        return "#e5e7eb"; // Gray
+            return "#10b981";
+        return "#e5e7eb";
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

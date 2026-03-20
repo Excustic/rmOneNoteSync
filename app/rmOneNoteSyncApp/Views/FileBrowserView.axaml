@@ -51,9 +51,10 @@
                             <Button Content="Load Folders" 
                                     Command="{Binding LoadFoldersCommand}"
                                     IsEnabled="{Binding CanLoadFolders}"/>
-                            <Button Content="Save Selection" 
+                            <Button Content="{Binding SaveButtonText}" 
                                     Command="{Binding SaveSelectionCommand}"
-                                    Classes="primary"
+                                    Background="{Binding SaveButtonBg}"
+                                    Foreground="{Binding SaveButtonFg}"
                                     IsEnabled="{Binding HasLoadedFolders}"/>
                         </StackPanel>
                     </Grid>

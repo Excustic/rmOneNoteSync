@@ -116,10 +116,19 @@
                     </StackPanel>
                     
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button Content="Save Settings" 
-                               Command="{Binding SaveSettingsCommand}"
-                               Classes="primary"/>
-                        
+                        <Button Content="{Binding SaveSettingsButtonText}" 
+                            Command="{Binding SaveSettingsCommand}"
+                            Background="{Binding SaveSettingsButtonBg}"
+                            Foreground="{Binding SaveSettingsButtonFg}"
+                            HorizontalAlignment="Left" Cursor="Hand">
+                            <Button.Transitions>
+                                <Transitions>
+                                    <BrushTransition Property="Background" Duration="0:0:0.2"/>
+                                    <BrushTransition Property="Foreground" Duration="0:0:0.2"/>
+                                </Transitions>
+                            </Button.Transitions>
+                        </Button>
+
                         <Button Content="{Binding ClearCacheButtonText}" 
                             Command="{Binding ClearCacheCommand}"
                             Background="{Binding ClearCacheButtonBg}" 

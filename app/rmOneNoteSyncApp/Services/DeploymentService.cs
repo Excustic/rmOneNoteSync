@@ -134,6 +134,7 @@ namespace rmOneNoteSyncApp.Services
                 result.ComponentStatus = checkResult.ComponentStatus;
 
                 ReportProgress("Deployment complete!", 1.0, DeploymentStage.Complete);
+                _logger.LogInformation("Firmware version {Version} was successfully deployed to reMarkable", result.InstalledVersion);
             }
             catch (Exception ex)
             {

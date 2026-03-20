@@ -239,7 +239,7 @@ public partial class MainViewModel : ViewModelBase
             var device = _detectionService.CurrentDevice;
             if (!_sshService.IsConnected || _sshService.CurrentIp != device.IpAddress)
             {
-                _logger?.LogInformation("Connecting SSH to {IP} via {Type}", device.IpAddress, device.ConnectionType);
+                _logger?.LogDebug("Connecting SSH to {IP} via {Type}", device.IpAddress, device.ConnectionType);
 
                 var connected = await _sshService.ConnectAsync(device.IpAddress, _configuration?.DevicePassword ?? string.Empty);
                 if (connected)
@@ -258,7 +258,7 @@ public partial class MainViewModel : ViewModelBase
                         var localIp = await _detectionService.GetLocalIpAddressForDevice(device.IpAddress);
                         if (!string.IsNullOrEmpty(localIp))
                         {
-                            _logger?.LogInformation("Injecting local IP {LocalIP} as fallback to device", localIp);
+                            _logger?.LogDebug("Injecting local IP {LocalIP} as fallback to device", localIp);
                             await _sshService.UpdateServerUrlFallbackAsync(localIp);
                         }
                     }
@@ -279,7 +279,7 @@ public partial class MainViewModel : ViewModelBase
                 IsConnected = false;
             });
         }
-        _logger?.LogInformation("DetectionServiceConnected: {DET}, SSHConnected: {SSH}",
+        _logger?.LogDebug("DetectionServiceConnected: {DET}, SSHConnected: {SSH}",
             _detectionService.IsConnected, _sshService.IsConnected);
     }
 
@@ -311,6 +311,9 @@ public partial class MainViewModel : ViewModelBase
 
                 if (DevicePassword != string.Empty)
                     await ReconnectSSH();
+                DeviceStatusText = $"Connected via {e.Device.ConnectionType} at {e.Device.IpAddress}";
+                ConnectionStateText = $"{e.Device.ConnectionType} Connected";
+                ConnectionState = ConnectionState.Configured;
                 if (!ShowSetupScreen && _sshService.IsConnected)
                 {
                     var installationStatus = await _deploymentService.CheckInstallationAsync();
@@ -318,10 +321,6 @@ public partial class MainViewModel : ViewModelBase
                                         _detectionService.CurrentDevice?.SyncVersion == "Unknown" ||
                                         installationStatus.IsInstalled == false ||
                                     installationStatus.InstalledVersion != currentAppVersion;
-
-                    DeviceStatusText = $"Connected via {e.Device.ConnectionType} at {e.Device.IpAddress}";
-                    ConnectionStateText = $"{e.Device.ConnectionType} Connected";
-                    ConnectionState = ConnectionState.Configured;
                 }
             }
             else
@@ -455,13 +454,13 @@ public partial class MainViewModel : ViewModelBase
                 };
                 if (!installStatus.IsInstalled)
                 {
-                    _logger.LogInformation("No installation found on device. Deploying fresh daemon...");
+                    _logger.LogDebug("No installation found on device. Deploying fresh daemon...");
                     await _deploymentService.DeployAsync(dev);
                     await _sshService.RestartServiceAsync();
                 }
                 else if (installStatus.InstalledVersion != currentAppVersion)
                 {
-                    _logger.LogInformation("Tablet daemon is outdated ({Installed} vs {Current}). Triggering update...",
+                    _logger.LogDebug("Tablet daemon is outdated ({Installed} vs {Current}). Triggering update...",
                         installStatus.InstalledVersion, currentAppVersion);
                     OnDeploymentProgress(this, new DeploymentProgressEventArgs()
                     {
