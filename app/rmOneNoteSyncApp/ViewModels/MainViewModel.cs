@@ -167,7 +167,8 @@ public partial class MainViewModel : ViewModelBase
         {
             var config = await _databaseService.GetConfigurationAsync();
             ShowSetupScreen = config is null or { DevicePassword: "" };
-
+            _detectionService.IncludeSSHConnectionCheck = !ShowSetupScreen;
+            await _detectionService.StartMonitoringAsync();
             if (!ShowSetupScreen)
             {
                 if (config != null && config.AutoSync)
@@ -187,9 +188,6 @@ public partial class MainViewModel : ViewModelBase
 
         // Subscribe to device connection events
         _detectionService.DeviceConnectionChanged += OnConnectionChanged;
-
-        // Start monitoring for devices
-        Task.Run(async () => await _detectionService.StartMonitoringAsync());
 
         _oneNoteAuth = oneNoteAuth;
 
@@ -296,11 +294,15 @@ public partial class MainViewModel : ViewModelBase
                 string currentAppVersion = Assembly.GetExecutingAssembly()
                     .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
                     .InformationalVersion?.Split('+')[0] ?? "0.0.0";
-                var installationStatus = await _deploymentService.CheckInstallationAsync();
-                NeedsDeployment = _detectionService.CurrentDevice?.SyncVersion == "Not installed" ||
-                                      _detectionService.CurrentDevice?.SyncVersion == "Unknown" ||
-                                      installationStatus.IsInstalled == false ||
-                                      installationStatus.InstalledVersion != currentAppVersion;
+
+                if (!ShowSetupScreen)
+                {
+                    var installationStatus = await _deploymentService.CheckInstallationAsync();
+                    NeedsDeployment = _detectionService.CurrentDevice?.SyncVersion == "Not installed" ||
+                                        _detectionService.CurrentDevice?.SyncVersion == "Unknown" ||
+                                        installationStatus.IsInstalled == false ||
+                                        installationStatus.InstalledVersion != currentAppVersion;
+                }
             }
             else
             {
@@ -312,7 +314,8 @@ public partial class MainViewModel : ViewModelBase
                 NeedsDeployment = false;
             }
 
-            _ = ReconnectSSH();
+            if (DevicePassword != string.Empty)
+                _ = ReconnectSSH();
             OnPropertyChanged(nameof(CanConnect));
         });
     }
@@ -504,8 +507,10 @@ public partial class MainViewModel : ViewModelBase
             EnableWifiSync = true,
             AutoSync = true
         };
-
         await _databaseService.SaveConfigurationAsync(config);
+
+        // Check SSH connection along with ping from now on
+        _detectionService.IncludeSSHConnectionCheck = true;
 
         // Wait briefly to allow services to transition state
         await Task.Delay(500);

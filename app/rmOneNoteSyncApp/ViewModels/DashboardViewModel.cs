@@ -236,7 +236,7 @@ public partial class DashboardViewModel : ViewModelBase
             // Dispatch properties to UI Thread
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                _logger.LogDebug("IsConnected inside UI refresh: {IsConnected}, and local IsConnected: {localIsConnected}", _detectionService.IsConnected, IsConnected);
+                _logger.LogDebug("device.IsConnected inside UI refresh: {IsConnected}, and local IsConnected: {localIsConnected}", _detectionService.IsConnected, IsConnected);
 
                 RequiresManualScan = _detectionService.RequiresManualScan;
                 DeviceStatus = IsConnected ? "Connected" : "Disconnected";

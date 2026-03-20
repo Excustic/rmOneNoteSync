@@ -31,6 +31,11 @@ public interface IDeviceDetectionService : IDisposable
     bool RequiresManualScan { get; }
 
     /// <summary>
+    /// True if the service should include SSH connection check in <see cref="CheckConnectionAsync"/>.
+    /// </summary>
+    bool IncludeSSHConnectionCheck { get; set; }
+
+    /// <summary>
     /// Start monitoring for device connections
     /// </summary>
     Task StartMonitoringAsync();

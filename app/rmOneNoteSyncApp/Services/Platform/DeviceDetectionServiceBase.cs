@@ -35,6 +35,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
     public event EventHandler<DeviceConnectionEventArgs>? DeviceConnectionChanged;
     private bool _isConnected;
     public bool IsConnected => _currentDevice != null && _isConnected;
+    public bool IncludeSSHConnectionCheck { get; set; } = true;
     public DeviceInfo? CurrentDevice => _currentDevice;
 
     public void ResetWifiScanAttempts()
@@ -90,15 +91,18 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
                 // Verify we can ping the device on the USB IP
                 if (_currentDevice == null || _currentDevice.ConnectionType != DeviceConnectionType.USB || _currentDevice.MacAddress != config?.DeviceMacAddress)
                 {
-                    if (!_sshService.IsConnected || _sshService.CurrentIp != REMARKABLE_USB_IP)
+                    var deviceInfo = new Dictionary<string, string>();
+                    if ((!_sshService.IsConnected || _sshService.CurrentIp != REMARKABLE_USB_IP) && IncludeSSHConnectionCheck)
+                    {
                         await _sshService.ConnectAsync(REMARKABLE_USB_IP, config?.DevicePassword);
-                    var deviceInfo = await _sshService.GetDeviceInfoAsync();
+                        deviceInfo = await _sshService.GetDeviceInfoAsync();
+                    }
                     // New USB connection
                     _currentDevice = new DeviceInfo
                     {
                         IpAddress = REMARKABLE_USB_IP,
                         InterfaceName = networkInterface.Name,
-                        MacAddress = await _sshService.GetMacAddressAsync() ?? "Unknown",
+                        MacAddress = IncludeSSHConnectionCheck ? await _sshService.GetMacAddressAsync() ?? "Unknown" : "Unknown",
                         DetectedAt = DateTime.UtcNow,
                         ConnectionType = DeviceConnectionType.USB,
                         Model = deviceInfo.TryGetValue("Model", out var model) ? model : "Unknown",
@@ -117,7 +121,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
             }
 
             // 2. Check last known WiFi IP or current connection persistence
-            else if (!string.IsNullOrEmpty(targetIp) && await PingDeviceAsync(targetIp))
+            else if (IncludeSSHConnectionCheck && !string.IsNullOrEmpty(targetIp) && await PingDeviceAsync(targetIp))
             {
                 _wifiScanAttempts = 0;
                 _requiresManualScan = false;
@@ -130,7 +134,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
                     {
                         IpAddress = targetIp,
                         InterfaceName = "WLAN",
-                        MacAddress = await _sshService.GetMacAddressAsync() ?? "Unknown",
+                        MacAddress = IncludeSSHConnectionCheck ? await _sshService.GetMacAddressAsync() ?? "Unknown" : "Unknown",
                         DetectedAt = DateTime.UtcNow,
                         ConnectionType = DeviceConnectionType.WiFi,
                         Model = deviceInfo.TryGetValue("Model", out var model) ? model : "Unknown",
@@ -155,7 +159,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
                 });
             }
             // 3. ARP Scan - try to find IP of the device in the local network as last resort.
-            if (!_isConnected)
+            if (IncludeSSHConnectionCheck && !_isConnected)
             {
                 if (await ArpScan(config))
                 {
@@ -168,7 +172,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
                         {
                             IpAddress = config.LastNetworkIp,
                             InterfaceName = "WLAN",
-                            MacAddress = await _sshService.GetMacAddressAsync() ?? "Unknown",
+                            MacAddress = IncludeSSHConnectionCheck ? await _sshService.GetMacAddressAsync() ?? "Unknown" : "Unknown",
                             DetectedAt = DateTime.UtcNow,
                             ConnectionType = DeviceConnectionType.WiFi,
                             Model = deviceInfo.TryGetValue("Model", out var model) ? model : "Unknown",
@@ -261,7 +265,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
         {
             using var ping = new Ping();
             Debug.WriteLine($"Pinging device at {ipAddress}");
-            var reply = await ping.SendPingAsync(ipAddress, ipAddress == REMARKABLE_USB_IP ? 2000 : 15000);
+            var reply = await ping.SendPingAsync(ipAddress, ipAddress == REMARKABLE_USB_IP ? 200 : 15000);
             Debug.WriteLine($"Ping result: {reply.Status}");
             return reply.Status == IPStatus.Success;
         }
