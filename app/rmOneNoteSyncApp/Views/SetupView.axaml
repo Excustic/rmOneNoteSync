@@ -41,7 +41,7 @@
                                 <StackPanel Spacing="8">
                                     <TextBlock Text="1. Connect your reMarkable via USB cable" TextWrapping="Wrap"/>
                                     <TextBlock Text="2. Enable Developer Mode in Settings > Developer" TextWrapping="Wrap"/>
-                                    <TextBlock Text="3. Note the password shown on your device" TextWrapping="Wrap"/>
+                                    <TextBlock Text="3. Note the password shown in Settings > Help > Copyrights and licenses" TextWrapping="Wrap"/>
                                     
                                     <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,10,0,0">
                                         <PathIcon Data="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2Z"
