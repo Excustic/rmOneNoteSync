@@ -1,0 +1,33 @@
+name: 💻 Hardware Compatibility Report
+description: Tell us if the app works on an untested OS or device!
+title: "[Hardware]: Works on "
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping us update the Compatibility Matrix!
+  - type: input
+    id: desktop-os
+    attributes:
+      label: Desktop OS
+      placeholder: e.g., Ubuntu 24.04, macOS 14
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: reMarkable Device
+      options:
+        - reMarkable 1
+        - reMarkable 2
+        - reMarkable Paper Pro
+    validations:
+      required: true
+  - type: input
+    id: rm-os
+    attributes:
+      label: reMarkable OS Version
+      placeholder: e.g., v3.15.2.0
+    validations:
+      required: true
