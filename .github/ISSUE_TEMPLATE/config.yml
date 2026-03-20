@@ -1,5 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 💬 Ask a Question
-    url: https://github.com/Excustic/rmOneNoteSync/discussions/new?category=q-a
-    about: Please ask and answer questions here.
+  - name: 🆘 Troubleshooting & Support
+    url: https://github.com/Excustic/rmOneNoteSync/discussions/categories/q-a
+    about: "Tablet won't connect? OneNote login failing? Ask the community for help here."
+  - name: 📓 Workflows & Show-and-Tell
+    url: https://github.com/Excustic/rmOneNoteSync/discussions/categories/show-and-tell
+    about: "Share how you organize your notebooks, or show off your OneNote setup!"
+  - name: 💬 General Discussion
+    url: https://github.com/Excustic/rmOneNoteSync/discussions/categories/general
+    about: "Chat about the project, future ideas, or reMarkable updates."

@@ -21,11 +21,17 @@ First off, thank you for considering contributing to `rmOneNoteSync`! Whether yo
 
 If you're new to open source, here's a quick overview of the workflow:
 
-1. **Fork** this repository to your own GitHub account.
-2. **Clone** your fork locally: `git clone https://github.com/<your-username>/rmOneNoteSync.git`
-3. Create a new **branch** for your changes: `git checkout -b feat/my-awesome-feature`
-4. Make your changes, commit them, and **push** to your fork.
-5. Open a **Pull Request** against the `main` branch of this repository.
+### 🤝 Pull Request Workflow
+
+We follow a standard, clean open-source workflow:
+
+1. **Find or Open an Issue:** Before writing code, ensure there is an open Issue for your bug or feature. This prevents duplicated effort!
+2. **Fork & Clone:** Fork the repository to your account and clone it locally.
+3. **Branch:** Create a branch using a semantic naming convention (e.g., `git checkout -b fix/issue-42-button-color` or `feat/new-sync-ui`).
+4. **Code & Test:** Make your changes. Ensure `dotnet build` and `make all` run cleanly.
+5. **Push:** Push the branch to your fork.
+6. **Open a PR:** Open a Pull Request against our `main` branch. 
+   * **Crucial:** In your PR description, write `Fixes #ISSUE_NUMBER` so GitHub automatically links and closes the issue when merged.
 
 Before you start coding, please read the architecture sections below. Understanding how the two halves of the project communicate is the key to working on this codebase effectively.
 
@@ -314,7 +320,15 @@ dotnet restore
 dotnet run
 ```
 
-> **Note:** To enable OneNote functionality, you need an Azure App Registration Client ID. Set it in `appsettings.json`. For local development without OneNote, the app will still run — the auth features will simply fail gracefully.
+> **Note:** To enable OneNote functionality, you need an Azure App Registration Client ID. Set it in `appsettings.json`. For local development without OneNote, the app will still run — the auth features will simply fail gracefully. Example `appsettings.json`:
+
+```json
+{
+  "AzureAd": {
+    "ClientId": "YOUR_COPIED_CLIENT_ID_HERE"
+  }
+}
+```
 
 ### Device Daemon
 
