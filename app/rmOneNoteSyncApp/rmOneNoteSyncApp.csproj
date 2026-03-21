@@ -17,7 +17,8 @@
         <RepositoryType>git</RepositoryType>
         <Authors>excustic</Authors>
         <Description>Synchronize reMarkable notebooks to OneNote</Description>
-    </PropertyGroup>
+      <UserSecretsId>89b2e72c-c0ba-4cd9-ad21-1f58a6a4316e</UserSecretsId>
+  </PropertyGroup>
 
     <ItemGroup>
         <AvaloniaResource Include="Assets\**" />
@@ -28,7 +29,14 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <None Include="licenses\LICENSE.txt" Pack="true" PackagePath=""/>
+        <None Include="licenses\LICENSE.txt" Pack="true" PackagePath="" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="appsettings.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <ExcludeFromPackage>true</ExcludeFromPackage>
+        </Content>
     </ItemGroup>
 
     <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
