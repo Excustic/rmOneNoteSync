@@ -5,20 +5,20 @@ First off, thank you for considering contributing to `rmOneNoteSync`! Whether yo
 ---
 
 ## Table of Contents
-- [Getting Started](#-getting-started)
-- [System Architecture Overview](#-system-architecture-overview)
+- [Getting Started](#getting-started)
+- [System Architecture Overview](#system-architecture-overview)
 - [Part 1: The Desktop Application](#part-1-the-desktop-application-apprmonenotesyncapp)
 - [Part 2: The Device Daemon](#part-2-the-device-daemon-rm-daemon)
-- [How Everything Connects: The Data Flow](#-how-everything-connects-the-data-flow)
-- [Repository Structure](#-repository-structure)
-- [Development Setup](#-development-setup)
-- [CI/CD Pipeline](#-cicd-pipeline)
-- [Submitting a Contribution](#-submitting-a-contribution)
+- [How Everything Connects: The Data Flow](#how-everything-connects-the-data-flow)
+- [Repository Structure](#repository-structure)
+- [Development Setup](#development-setup)
+- [CI/CD Pipeline](#cicd-pipeline)
+- [Submitting a Contribution](#submitting-a-contribution)
 
 ---
 
 ## 🚀 Getting Started
-
+<a id="getting-started"></a>
 If you're new to open source, here's a quick overview of the workflow:
 
 ### 🤝 Pull Request Workflow
@@ -38,6 +38,7 @@ Before you start coding, please read the architecture sections below. Understand
 ---
 
 ## 🏗️ System Architecture Overview
+<a id="system-architecture-overview"></a>
 
 This project uses a **decoupled, two-part architecture**. This design is intentional: it minimizes the CPU and battery impact on the reMarkable tablet by offloading all heavy processing (authentication, format conversion, cloud API calls) to the user's desktop computer.
 
@@ -80,6 +81,7 @@ flowchart LR
 ---
 
 ## Part 1: The Desktop Application (`app/rmOneNoteSyncApp`)
+<a id="part-1-the-desktop-application-apprmonenotesyncapp"></a>
 
 **Language & Framework:** C# 13, .NET 9, [Avalonia UI](https://avaloniaui.net/) (cross-platform UI framework).
 **Pattern:** MVVM (Model-View-ViewModel) using [CommunityToolkit.Mvvm](https://learn.microsoft.com/en-us/dotnet/communitytoolkit/mvvm/).
@@ -155,6 +157,7 @@ Avalonia XAML files for rendering the UI. Each `View` is bound to its correspond
 ---
 
 ## Part 2: The Device Daemon (`rm-daemon`)
+<a id="part-2-the-device-daemon-rm-daemon"></a>
 
 **Language:** C (C99).
 **Build System:** GNU Make with cross-compilation via the [reMarkable Codex toolchain](https://developer.remarkable.com/).
@@ -232,6 +235,7 @@ A minimal, dependency-free HTTP client built on raw POSIX sockets. Only supports
 ---
 
 ## 🔄 How Everything Connects: The Data Flow
+<a id="how-everything-connects-the-data-flow"></a>
 
 Here's the complete journey of a notebook page from pen stroke to OneNote:
 
@@ -264,6 +268,7 @@ Here's the complete journey of a notebook page from pen stroke to OneNote:
 ---
 
 ## 📂 Repository Structure
+<a id="repository-structure"></a>
 
 ```text
 rmOneNoteSync/
@@ -304,30 +309,33 @@ rmOneNoteSync/
 ---
 
 ## 🛠️ Development Setup
+<a id="development-setup"></a>
 
 ### Desktop Application
 
 **Prerequisites:**
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
+- [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
 - An IDE with C# support (e.g., [JetBrains Rider](https://www.jetbrains.com/rider/), Visual Studio, or VS Code with the C# Dev Kit)
+- **Avalonia UI Extensions:** If you are using Visual Studio or VS Code, ensure you install the official Avalonia UI extension for XAML previewing and code completion.
 
 ```bash
-# Restore dependencies
+# Navigate to the app directory and restore dependencies
 cd app/rmOneNoteSyncApp
 dotnet restore
-
-# Run in development
-dotnet run
 ```
 
-> **Note:** To enable OneNote functionality, you need an Azure App Registration Client ID. Set it in `appsettings.json`. For local development without OneNote, the app will still run — the auth features will simply fail gracefully. Example `appsettings.json`:
+> **Note on Authentication:** To enable OneNote synchronization during local development, you need an Azure App Registration Client ID. The repository contains a placeholder (`__REPLACE_ME__`) in `appsettings.json`. 
+> 
+> **Do not edit `appsettings.json` directly**, as you might accidentally commit your personal Client ID to the repository! Instead, use the .NET User Secrets manager from within the `app/rmOneNoteSyncApp` directory to safely store it locally on your machine:
+> 
+> ```bash
+> dotnet user-secrets set "AzureAd:ClientId" "YOUR_COPIED_CLIENT_ID_HERE"
+> ```
+> For local development without OneNote, you can skip this step. The app will still compile and run, but the authentication features will simply fail gracefully.
 
-```json
-{
-  "AzureAd": {
-    "ClientId": "YOUR_COPIED_CLIENT_ID_HERE"
-  }
-}
+```bash
+# Run the application in development mode
+dotnet run
 ```
 
 ### Device Daemon
@@ -337,7 +345,7 @@ dotnet run
 - GNU Make
 
 ```bash
-# Source the cross-compilation environment for your device
+# Source the cross-compilation environment for your device (Example for Paper Pro)
 source /opt/codex/ferrari/4.3.98/environment-setup-cortexa53-crypto-remarkable-linux
 
 # Build all binaries
@@ -345,13 +353,13 @@ cd rm-daemon
 make all
 ```
 
-This produces three binaries in `build/`: `watcher`, `httpclient`, and `cache_debug`.
+This produces three binaries in the `build/` directory: `watcher`, `httpclient`, and `cache_debug`.
 
-> **Tip:** If you are only working on the desktop application, you do not need the Codex toolchain at all. The daemon binaries are pre-compiled and distributed via GitHub Releases. The desktop app downloads them automatically during deployment.
-
+> **Tip:** If you are only working on the Desktop Application, you do not need the Codex toolchain at all. The daemon binaries are pre-compiled and distributed via GitHub Releases. The desktop app will download them automatically during the deployment phase.
 ---
 
 ## 🔁 CI/CD Pipeline
+<a id="cicd-pipeline"></a>
 
 The project uses **GitHub Actions** (`build.yml`) with four coordinated jobs:
 
@@ -367,6 +375,7 @@ Version numbers are injected from the Git tag into `rmOneNoteSyncApp.csproj`, `i
 ---
 
 ## ✅ Submitting a Contribution
+<a id="submitting-a-contribution"></a>
 
 1. Ensure your changes **build without errors**: `dotnet build` for the C# app, `make all` for the daemon.
 2. If you've changed C code in the `rm-daemon`, test it locally with the `cache_debug` tool and monitor the logs.
