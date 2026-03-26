@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Avalonia;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,87 +17,113 @@ namespace rmOneNoteSyncApp;
 
 class Program
 {
+    private static FileStream? _lockFile;
+
     [STAThread]
     public static void Main(string[] args)
     {
-        // Build the host with dependency injection
-        var host = Host.CreateDefaultBuilder(args)
-            .ConfigureServices((context, services) =>
-            {
-                // Configure Serilog for file logging
-                var logPath = Path.Combine(
+
+        var dir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "rmOneNoteSyncApp",
-                    "logs",
-                    "app-.log");
+                    "rmOneNoteSyncApp");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            _lockFile = File.Open(Path.Combine(dir, ".lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            _lockFile.Lock(0, 0);
+        }
+        catch
+        {
+            Console.WriteLine("Another instance of the application is already running. Exiting.");
+            return;
+        }
 
-                Log.Logger = new LoggerConfiguration()
-                    .MinimumLevel.Debug()
-                    .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-                    .Enrich.FromLogContext()
-                    .WriteTo.Console()
-                    .WriteTo.File(
-                        logPath,
-                        rollingInterval: RollingInterval.Day,
-                        retainedFileCountLimit: 7,
-                        fileSizeLimitBytes: 10_000_000, // 10MB per file
-                        rollOnFileSizeLimit: true,
-                        shared: true,
-                        flushToDiskInterval: TimeSpan.FromSeconds(1))
-                    .CreateLogger();
-
-                // Use Serilog for logging
-                services.AddLogging(builder =>
+        try
+        {
+            // Build the host with dependency injection
+            var host = Host.CreateDefaultBuilder(args)
+                .ConfigureServices((context, services) =>
                 {
-                    builder.ClearProviders();
-                    builder.AddSerilog();
-                });
+                    // Configure Serilog for file logging
+                    var logPath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "rmOneNoteSyncApp",
+                        "logs",
+                        "app-.log");
 
-                // Register platform-specific services based on OS
-                RegisterPlatformServices(services);
+                    Log.Logger = new LoggerConfiguration()
+                        .MinimumLevel.Debug()
+                        .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+                        .Enrich.FromLogContext()
+                        .WriteTo.Console()
+                        .WriteTo.File(
+                            logPath,
+                            rollingInterval: RollingInterval.Day,
+                            retainedFileCountLimit: 7,
+                            fileSizeLimitBytes: 10_000_000, // 10MB per file
+                            rollOnFileSizeLimit: true,
+                            shared: true,
+                            flushToDiskInterval: TimeSpan.FromSeconds(1))
+                        .CreateLogger();
 
-                // Register core services that work on all platforms
-                services.AddSingleton<IDatabaseService, SqliteDatabaseService>();
-                services.AddSingleton<ISshService, SshService>();
-                services.AddSingleton<IDeploymentService, DeploymentService>();
-                services.AddSingleton<ISyncService, SyncService>();
-                services.AddSingleton<IOneNoteAuthService, OneNoteAuthService>();
-                services.AddSingleton<IConfigurationProviderService, ConfigurationProviderService>();
-                services.AddSingleton<ISyncServerService, SyncServerService>();
-                services.AddSingleton<IOneNoteClient, OneNoteClient>();
-                services.AddSingleton<IRmConverterService, RmConverterService>();
-                services.AddSingleton<IStartupService, StartupService>();
-                services.AddSingleton<ISoftwareUpdateService, SoftwareUpdateService>();
+                    // Use Serilog for logging
+                    services.AddLogging(builder =>
+                    {
+                        builder.ClearProviders();
+                        builder.AddSerilog();
+                    });
 
-                // Register ViewModels
-                services.AddSingleton<MainViewModel>();
-                services.AddSingleton<DashboardViewModel>();
-                services.AddSingleton<FolderPickerViewModel>();
-                services.AddSingleton<SyncStatusViewModel>();
-                services.AddSingleton<SettingsViewModel>();
-                services.AddSingleton<LogsViewModel>();
+                    // Register platform-specific services based on OS
+                    RegisterPlatformServices(services);
 
-                services.AddHostedService<SyncServerHostedService>();
+                    // Register core services that work on all platforms
+                    services.AddSingleton<IDatabaseService, SqliteDatabaseService>();
+                    services.AddSingleton<ISshService, SshService>();
+                    services.AddSingleton<IDeploymentService, DeploymentService>();
+                    services.AddSingleton<ISyncService, SyncService>();
+                    services.AddSingleton<IOneNoteAuthService, OneNoteAuthService>();
+                    services.AddSingleton<IConfigurationProviderService, ConfigurationProviderService>();
+                    services.AddSingleton<ISyncServerService, SyncServerService>();
+                    services.AddSingleton<IOneNoteClient, OneNoteClient>();
+                    services.AddSingleton<IRmConverterService, RmConverterService>();
+                    services.AddSingleton<IStartupService, StartupService>();
+                    services.AddSingleton<ISoftwareUpdateService, SoftwareUpdateService>();
 
-                // Register the main application
-                services.AddSingleton<App>();
-            })
-            .Build();
+                    // Register ViewModels
+                    services.AddSingleton<MainViewModel>();
+                    services.AddSingleton<DashboardViewModel>();
+                    services.AddSingleton<FolderPickerViewModel>();
+                    services.AddSingleton<SyncStatusViewModel>();
+                    services.AddSingleton<SettingsViewModel>();
+                    services.AddSingleton<LogsViewModel>();
 
-        // Make services available globally for Avalonia
-        App.ServiceProvider = host.Services;
+                    services.AddHostedService<SyncServerHostedService>();
 
-        // Initialize database
-        var dbService = host.Services.GetRequiredService<IDatabaseService>();
-        var dbPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "rmOneNoteSyncApp",
-            "sync.db");
-        dbService.Initialize(dbPath);
+                    // Register the main application
+                    services.AddSingleton<App>();
+                })
+                .Build();
 
-        // Build and run Avalonia application
-        BuildAvaloniaApp()
-            .StartWithClassicDesktopLifetime(args);
+            // Make services available globally for Avalonia
+            App.ServiceProvider = host.Services;
+
+            // Initialize database
+            var dbService = host.Services.GetRequiredService<IDatabaseService>();
+            var dbPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "rmOneNoteSyncApp",
+                "sync.db");
+            dbService.Initialize(dbPath);
+
+            // Build and run Avalonia application
+            BuildAvaloniaApp()
+                .StartWithClassicDesktopLifetime(args);
+        }
+        finally
+        {
+            _mutex?.ReleaseMutex();
+            _mutex?.Dispose();
+        }
     }
 
     private static void RegisterPlatformServices(IServiceCollection services)

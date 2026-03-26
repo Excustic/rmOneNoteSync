@@ -1,0 +1,87 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:rmOneNoteSyncApp.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="450"
+        Width="600" Height="450"
+        x:Class="rmOneNoteSyncApp.Views.ManualSyncWindow"
+        x:DataType="vm:ManualSyncViewModel"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Title="Manual Sync">
+        
+    <Grid>
+        <!-- Loading overlay -->
+        <Border Background="White" ZIndex="10" IsVisible="{Binding IsLoading}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="20">
+                <TextBlock Text="{Binding LoadingMessage}" FontSize="16" Foreground="#666" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="400"/>
+            </StackPanel>
+        </Border>
+        
+        <DockPanel Margin="20" IsVisible="{Binding !IsLoading}">
+            <StackPanel DockPanel.Dock="Top" Spacing="5" Margin="0,0,0,20">
+                <TextBlock Text="Manual Synchronization" FontSize="20" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding NotebookName, StringFormat='Select pages to sync from {0}'}" Foreground="#666"/>
+            </StackPanel>
+            
+            <StackPanel DockPanel.Dock="Bottom" Spacing="10" Margin="0,20,0,0">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+                    <Button Content="Cancel" Command="{Binding CancelCommand}" Classes="stroke"/>
+                    <Button Content="{Binding SelectedCount, StringFormat='Synchronize {0} items'}" 
+                            Command="{Binding SyncSelectedCommand}" 
+                            Classes="primary"
+                            IsEnabled="{Binding SelectedCount, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                </StackPanel>
+            </StackPanel>
+            
+            <Border Background="White" CornerRadius="8" BorderBrush="#e5e7eb" BorderThickness="1">
+                <DockPanel>
+                    <!-- Toolbar -->
+                    <Border DockPanel.Dock="Top" BorderBrush="#e5e7eb" BorderThickness="0,0,0,1" Padding="10">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="Select All" Command="{Binding SelectAllCommand}" Classes="small stroke"/>
+                            <Button Content="Select None" Command="{Binding SelectNoneCommand}" Classes="small stroke"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <DataGrid ItemsSource="{Binding Pages}"
+                              AutoGenerateColumns="False"
+                              CanUserReorderColumns="False"
+                              CanUserResizeColumns="False"
+                              CanUserSortColumns="True"
+                              GridLinesVisibility="Horizontal"
+                              SelectionMode="Single"
+                              BorderThickness="0">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Width="60">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:ManualSyncPageItem">
+                                        <CheckBox IsChecked="{Binding IsSelected}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            
+                            <DataGridTextColumn Header="Page" Binding="{Binding DisplayName}" Width="150" IsReadOnly="True" />
+                            
+                            <DataGridTemplateColumn Header="Status" Width="100">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:ManualSyncPageItem">
+                                        <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                            <PathIcon Width="16" Height="16" 
+                                                    Data="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"
+                                                    Foreground="{Binding StatusColor}" />
+                                            <TextBlock Text="{Binding StatusText}" Foreground="{Binding StatusColor}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            
+                            <DataGridTextColumn Header="Last Uploaded" Binding="{Binding LastUploadedStr}" Width="*" IsReadOnly="True" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </Border>
+        </DockPanel>
+    </Grid>
+</Window>

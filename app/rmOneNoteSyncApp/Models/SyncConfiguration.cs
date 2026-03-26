@@ -24,6 +24,7 @@ public class SyncConfiguration
     public List<string> SyncFiles { get; set; } = [];
     public int SyncIntervalSeconds { get; set; } = 300;
     public bool AutoSync { get; set; } = true;
+    public int SyncServerPort { get; set; } = 34983;
 
     // OneNote settings
     public string? OneNoteAccessToken { get; set; }

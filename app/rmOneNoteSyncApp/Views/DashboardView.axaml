@@ -105,27 +105,42 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:DocumentMetadata">
-                                <Button Command="{ReflectionBinding #DashboardRoot.DataContext.OpenUrlCommand}"
-                                        CommandParameter="{Binding OneNoteUrl}"
-                                        Background="#f8fafc"
-                                        BorderBrush="#e2e8f0"
-                                        BorderThickness="1"
-                                        CornerRadius="8"
-                                        Margin="0,0,15,15"
-                                        Padding="15"
-                                        Width="200"
-                                        Height="120">
-                                    <StackPanel Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <PathIcon Data="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"
-                                                  Width="32" Height="32" Foreground="#2563eb"/>
-                                        <TextBlock Text="{Binding NotebookName}" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap"/>
-                                        <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                                            <PathIcon Data="M12,18A6,6 0 0,1 6,12C6,11 6.25,10.03 6.7,9.2L5.24,7.74C4.46,8.97 4,10.43 4,12A8,8 0 0,0 12,20V23L16,19L12,15M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12C18,13 17.75,13.97 17.3,14.8L18.76,16.26C19.54,15.03 20,13.57 20,12A8,8 0 0,0 12,4Z" 
-                                                      Width="12" Height="12" Foreground="#64748b"/>
-                                            <TextBlock Text="{Binding LastModified, StringFormat='{}{0:d MMM yyyy, HH:mm}'}" Foreground="#64748b" FontSize="12" TextAlignment="Center"/>
+                                <Grid Margin="0,0,15,15" Width="200" Height="120">
+                                    <Button Command="{ReflectionBinding #DashboardRoot.DataContext.OpenUrlCommand}"
+                                            CommandParameter="{Binding OneNoteUrl}"
+                                            Background="#f8fafc"
+                                            BorderBrush="#e2e8f0"
+                                            BorderThickness="1"
+                                            CornerRadius="8"
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Stretch"
+                                            Padding="15">
+                                        <StackPanel Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <PathIcon Data="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"
+                                                      Width="32" Height="32" Foreground="#2563eb"/>
+                                            <TextBlock Text="{Binding NotebookName}" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                                <PathIcon Data="M12,18A6,6 0 0,1 6,12C6,11 6.25,10.03 6.7,9.2L5.24,7.74C4.46,8.97 4,10.43 4,12A8,8 0 0,0 12,20V23L16,19L12,15M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12C18,13 17.75,13.97 17.3,14.8L18.76,16.26C19.54,15.03 20,13.57 20,12A8,8 0 0,0 12,4Z" 
+                                                          Width="12" Height="12" Foreground="#64748b"/>
+                                                <TextBlock Text="{Binding LastModified, StringFormat='{}{0:d MMM yyyy, HH:mm}'}" Foreground="#64748b" FontSize="12" TextAlignment="Center"/>
+                                            </StackPanel>
                                         </StackPanel>
-                                    </StackPanel>
-                                </Button>
+                                    </Button>
+                                    <Button Background="Transparent" 
+                                            VerticalAlignment="Top" 
+                                            HorizontalAlignment="Right"
+                                            Margin="0,5,5,0" 
+                                            Padding="5">
+                                        <PathIcon Data="M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z" Width="16" Height="16" Foreground="#64748b"/>
+                                        <Button.Flyout>
+                                            <MenuFlyout>
+                                                <MenuItem Header="Sync Manually" 
+                                                          Command="{ReflectionBinding #DashboardRoot.DataContext.OpenManualSyncCommand}"
+                                                          CommandParameter="{Binding}"/>
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

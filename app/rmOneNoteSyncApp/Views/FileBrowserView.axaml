@@ -85,6 +85,7 @@
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <!-- Tri-state checkbox -->
                                                     <CheckBox IsChecked="{Binding SelectionState}"
+                                                              IsEnabled="{Binding ((vm:FolderPickerViewModel)DataContext).IsConnected, RelativeSource={RelativeSource AncestorType=TreeView, Mode=FindAncestor}}"
                                                               IsThreeState="{Binding IsFolder}"
                                                               Command="{Binding ((vm:FolderPickerViewModel)DataContext).ToggleSelectionCommand, RelativeSource={RelativeSource AncestorType=TreeView, Mode=FindAncestor}}"
                                                               CommandParameter="{Binding}"/>

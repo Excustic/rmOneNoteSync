@@ -6,6 +6,8 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using rmOneNoteSyncApp.Models;
 using rmOneNoteSyncApp.Services.Interfaces;
@@ -44,12 +46,19 @@ public class SyncServerService : ISyncServerService
         Directory.CreateDirectory(_uploadDirectory);
     }
 
-    public async Task StartAsync(int port = 8080)
+    public async Task StartAsync()
     {
         if (IsRunning)
         {
             _logger.LogWarning("Server is already running");
             return;
+        }
+
+        int port = await _configProvider.GetServerPortAsync();
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            await EnsureWindowsFirewallRuleAsync(port);
         }
 
         try
@@ -453,5 +462,46 @@ public class SyncServerService : ISyncServerService
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         return match.Success ? match.Groups[1].Value : "1";
+    }
+
+    private async Task EnsureWindowsFirewallRuleAsync(int port)
+    {
+        try
+        {
+            var checkCmd = new ProcessStartInfo
+            {
+                FileName = "netsh",
+                Arguments = "advfirewall firewall show rule name=\"rmOneNoteSync\"",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var proc = Process.Start(checkCmd);
+            if (proc == null) return;
+            string output = await proc.StandardOutput.ReadToEndAsync();
+            await proc.WaitForExitAsync();
+
+            if (output.Contains("No rules match"))
+            {
+                _logger.LogInformation("Windows Firewall rule not found. Prompting to add rule.");
+                var addCmd = new ProcessStartInfo
+                {
+                    FileName = "netsh",
+                    Arguments = $"advfirewall firewall add rule name=\"rmOneNoteSync\" dir=in action=allow protocol=TCP localport={port} profile=any",
+                    UseShellExecute = true,
+                    Verb = "runas"
+                };
+                using var addProc = Process.Start(addCmd);
+                if (addProc != null)
+                {
+                    await addProc.WaitForExitAsync();
+                    _logger.LogInformation("Windows Firewall rule addition finished.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to ensure Windows Firewall rule");
+        }
     }
 }

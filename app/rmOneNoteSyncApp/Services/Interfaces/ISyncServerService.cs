@@ -5,7 +5,7 @@ namespace rmOneNoteSyncApp.Services.Interfaces;
 
 public interface ISyncServerService
 {
-    Task StartAsync(int port = 8080);
+    Task StartAsync();
     Task StopAsync();
     bool IsRunning { get; }
     event EventHandler<bool>? StatusChanged;

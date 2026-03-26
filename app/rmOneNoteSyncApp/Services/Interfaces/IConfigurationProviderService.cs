@@ -7,6 +7,6 @@ public interface IConfigurationProviderService
 {
     Task<string> GetConfigurationJsonAsync(string deviceId);
     Task<bool> UpdateDeviceConfigurationAsync(bool restartService = true);
-    int GetServerPort();
+    Task<int> GetServerPortAsync();
     string ConfigPath { get; }
 }

@@ -107,6 +107,15 @@
                     </StackPanel>
                     
                     <StackPanel Spacing="5">
+                        <TextBlock Text="Server port (HTTP):" Foreground="#6b7280"/>
+                        <NumericUpDown Value="{Binding SyncServerPort}" 
+                                      Minimum="1024" Maximum="65535" 
+                                      Increment="1"
+                                      Width="150"
+                                      HorizontalAlignment="Left"/>
+                    </StackPanel>
+                    
+                    <StackPanel Spacing="5">
                         <TextBlock Text="Cache retention (days):" Foreground="#6b7280"/>
                         <NumericUpDown Value="{Binding CacheRetentionDays}" 
                                       Minimum="1" Maximum="365" 

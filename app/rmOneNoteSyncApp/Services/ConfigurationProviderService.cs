@@ -16,7 +16,6 @@ public class ConfigurationProviderService(
     : IConfigurationProviderService
 {
     private const string RemarkableIp = "10.11.99.1";
-    private const int ServerPort = 8080;
     public const string ConfigPath = "/home/root/onenote-sync/httpclient.conf";
     private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
@@ -28,11 +27,12 @@ public class ConfigurationProviderService(
 
         // Get the host IP address that's accessible from the reMarkable
         var hostIp = await deviceDetectionService.GetLocalIpAddressForDevice(RemarkableIp);
+        int serverPort = config?.SyncServerPort ?? 34983;
 
         // Build configuration for the device
         var deviceConfig = new
         {
-            server_url = $"http://{hostIp}:{ServerPort}/upload",
+            server_url = $"http://{hostIp}:{serverPort}/upload",
             api_key = string.Concat("rmOneNoteSync-", Guid.NewGuid().ToString("N").AsSpan(0, 16)),
             whitelist_ids = config?.SyncFiles ?? [], // New field with file IDs
             upload_interval_seconds = config?.SyncIntervalSeconds ?? 300,
@@ -58,6 +58,7 @@ public class ConfigurationProviderService(
         try
         {
             var config = await databaseService.GetConfigurationAsync();
+            int serverPort = config?.SyncServerPort ?? 34983;
             // Step 1: Get the correct IP address for communication
             var hostIp = await deviceDetectionService.GetLocalIpAddressForDevice(RemarkableIp);
             var hostIpFallback = await deviceDetectionService.GetLocalIpAddressForDevice(deviceDetectionService.CurrentDevice?.IpAddress ?? string.Empty);
@@ -74,8 +75,8 @@ public class ConfigurationProviderService(
             configBuilder.AppendLine($"# Generated at: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             configBuilder.AppendLine();
             configBuilder.AppendLine("# Server Configuration");
-            configBuilder.AppendLine($"SERVER_URL=http://{(hostIp[..hostIp.LastIndexOf('.')].Equals(rmSubnet) ? hostIp : string.Join('.', rmSubnet, "2"))}:{ServerPort}/upload");
-            configBuilder.AppendLine($"SERVER_URL_FALLBACK=http://{hostIpFallback}:{ServerPort}/upload");
+            configBuilder.AppendLine($"SERVER_URL=http://{(hostIp[..hostIp.LastIndexOf('.')].Equals(rmSubnet) ? hostIp : string.Join('.', rmSubnet, "2"))}:{serverPort}/upload");
+            configBuilder.AppendLine($"SERVER_URL_FALLBACK=http://{hostIpFallback}:{serverPort}/upload");
             configBuilder.AppendLine("API_KEY=rmOneNoteSync");
             configBuilder.AppendLine();
             configBuilder.AppendLine("# Upload Settings");
@@ -126,7 +127,7 @@ public class ConfigurationProviderService(
                 if (serviceStatus.Trim() == "active")
                 {
                     logger.LogDebug("✅ Configuration updated successfully! reMarkable will send files to {IP}:{Port}",
-                        hostIp, ServerPort);
+                        hostIp, serverPort);
                     return true;
                 }
                 else
@@ -136,7 +137,7 @@ public class ConfigurationProviderService(
                 }
             }
 
-            logger.LogInformation("✅ Configuration file updated successfully without restarting service (IP: {IP}:{Port})", hostIp, ServerPort);
+            logger.LogInformation("✅ Configuration file updated successfully without restarting service (IP: {IP}:{Port})", hostIp, serverPort);
             return true;
         }
         catch (Exception ex)
@@ -146,5 +147,9 @@ public class ConfigurationProviderService(
         }
     }
 
-    public int GetServerPort() => ServerPort;
+    public async Task<int> GetServerPortAsync()
+    {
+        var config = await databaseService.GetConfigurationAsync();
+        return config?.SyncServerPort ?? 34983;
+    }
 }
