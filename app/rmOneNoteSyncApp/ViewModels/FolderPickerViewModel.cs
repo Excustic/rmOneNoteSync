@@ -6,11 +6,12 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using rmOneNoteSyncApp.Models;
+using rmOneNoteSyncApp.Services;
 using rmOneNoteSyncApp.Services.Interfaces;
+using System.Net.Http;
 
 namespace rmOneNoteSyncApp.ViewModels;
 
@@ -19,6 +20,7 @@ public partial class FolderPickerViewModel : ViewModelBase
     private readonly ISshService _sshService;
     private readonly IDatabaseService _databaseService;
     private readonly ILogger<FolderPickerViewModel>? _logger;
+    private readonly IDeviceDetectionService _deviceDetectionService;
     private SyncConfiguration? _syncConfiguration;
 
     [ObservableProperty]
@@ -48,10 +50,11 @@ public partial class FolderPickerViewModel : ViewModelBase
     // Can only load folders if connected and not already loading
     public bool CanLoadFolders => IsConnected && !IsLoading;
 
-    public FolderPickerViewModel(ISshService sshService, IDatabaseService databaseService)
+    public FolderPickerViewModel(ISshService sshService, IDatabaseService databaseService, IDeviceDetectionService deviceDetectionService)
     {
         _sshService = sshService;
         _databaseService = databaseService;
+        _deviceDetectionService = deviceDetectionService;
 
         try
         {
@@ -168,6 +171,33 @@ public partial class FolderPickerViewModel : ViewModelBase
             // Build hierarchy
             var rootNodes = BuildHierarchy(allNodes, nodeMap);
 
+            var deviceIp = _deviceDetectionService.CurrentDevice?.IpAddress ?? "10.11.99.1";
+            var whitelist = new List<string>();
+            try
+            {
+                using var client = new HttpClient();
+                client.Timeout = TimeSpan.FromSeconds(5);
+                var response = await client.GetStringAsync($"http://{deviceIp}:8000/whitelist");
+                var doc = JsonDocument.Parse(response);
+                if (doc.RootElement.TryGetProperty("whitelist", out var whitelistArr))
+                {
+                    foreach (var item in whitelistArr.EnumerateArray())
+                    {
+                        var id = item.GetString();
+                        if (!string.IsNullOrEmpty(id)) whitelist.Add(id);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to fetch whitelist from HTTP API on {DeviceIp}", deviceIp);
+                // Fallback to local config
+                if (_syncConfiguration?.SyncFiles != null)
+                {
+                    whitelist.AddRange(_syncConfiguration.SyncFiles);
+                }
+            }
+
             // Update UI on main thread
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -175,7 +205,7 @@ public partial class FolderPickerViewModel : ViewModelBase
                 foreach (var node in rootNodes)
                 {
                     Folders.Add(node);
-                    foreach (var res in _syncConfiguration?.SyncFiles
+                    foreach (var res in whitelist
                                  .Select(id => FindFolderNode(node, id)).OfType<FileNode>()!)
                     {
                         res.SelectionState = true;
@@ -396,11 +426,14 @@ public partial class FolderPickerViewModel : ViewModelBase
             SaveButtonText = "Saving...";
             SaveButtonBg = "#f3f4f6";
             SaveButtonFg = "#374151";
-            // Collect all selected document IDs
+            // Collect all selected document IDs and their FileNodes
             var selectedIds = new List<string>();
+            var selectedNodes = new List<FileNode>();
             foreach (var root in Folders)
             {
-                selectedIds.AddRange(root.GetSelectedDocumentIds());
+                var nodes = root.GetSelectedDocuments();
+                selectedNodes.AddRange(nodes);
+                selectedIds.AddRange(nodes.Select(n => n.Id));
             }
 
             _logger?.LogDebug("Saving selection: {Count} documents", selectedIds.Count);
@@ -409,6 +442,25 @@ public partial class FolderPickerViewModel : ViewModelBase
             var config = await _databaseService.GetConfigurationAsync() ?? new SyncConfiguration();
             config.SyncFiles = selectedIds;
             await _databaseService.SaveConfigurationAsync(config);
+
+            // Create stub DocumentMetadata so new Notebooks appear on the Dashboard instantly
+            var existingDocs = await _databaseService.GetAllDocumentsAsync();
+            var existingIds = existingDocs.Select(d => d.DocumentId).ToHashSet();
+            
+            foreach (var node in selectedNodes)
+            {
+                if (!existingIds.Contains(node.Id))
+                {
+                    await _databaseService.SaveDocumentMetadataAsync(new DocumentMetadata
+                    {
+                        DocumentId = node.Id,
+                        VisibleName = node.Name,
+                        Type = "CollectionType",
+                        Parent = node.ParentId ?? "",
+                        LastModified = DateTime.UtcNow
+                    });
+                }
+            }
 
             StatusMessage = $"Saved {selectedIds.Count} documents to sync";
 
@@ -555,24 +607,24 @@ public partial class FileNode : ObservableObject
         }
     }
 
-    // Get all selected document IDs recursively
-    public List<string> GetSelectedDocumentIds()
+    // Get all selected documents recursively
+    public List<FileNode> GetSelectedDocuments()
     {
-        var ids = new List<string>();
+        var nodes = new List<FileNode>();
 
         if (!IsFolder && SelectionState == true)
         {
-            ids.Add(Id);
+            nodes.Add(this);
         }
 
         if (Children != null)
         {
             foreach (var child in Children)
             {
-                ids.AddRange(child.GetSelectedDocumentIds());
+                nodes.AddRange(child.GetSelectedDocuments());
             }
         }
 
-        return ids;
+        return nodes;
     }
 }

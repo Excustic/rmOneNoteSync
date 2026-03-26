@@ -381,6 +381,30 @@ public partial class DashboardViewModel : ViewModelBase
         {
         }
     }
+
+    [RelayCommand]
+    private async Task OpenManualSyncAsync(DocumentMetadata? document)
+    {
+        if (document == null) return;
+
+        var topLevel = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+            ? desktop.MainWindow
+            : null;
+
+        if (topLevel == null) return;
+
+        var dialog = new Views.ManualSyncWindow();
+        var vm = new ManualSyncViewModel(dialog, document, _detectionService, _databaseService, _logger);
+        dialog.DataContext = vm;
+
+        var result = await dialog.ShowDialog<bool>(topLevel);
+        if (result)
+        {
+            var mainVm = App.ServiceProvider?.GetService<MainViewModel>();
+            mainVm?.NavigateCommand.Execute("SyncStatus");
+            await SyncNowAsync();
+        }
+    }
 }
 
 public class ActivityItem

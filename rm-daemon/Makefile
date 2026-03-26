@@ -14,7 +14,7 @@ CC ?= $(CC)
 
 # Source files (ONLY define these once!)
 WATCHER_SRCS    = $(SRC_DIR)/watcher.c $(SRC_DIR)/cache_io.c $(SRC_DIR)/metadata_parser.c
-HTTPCLIENT_SRCS = $(SRC_DIR)/httpclient.c $(SRC_DIR)/cache_io.c $(SRC_DIR)/metadata_parser.c $(SRC_DIR)/http_simple.c
+HTTPCLIENT_SRCS = $(SRC_DIR)/httpclient.c $(SRC_DIR)/cache_io.c $(SRC_DIR)/metadata_parser.c $(SRC_DIR)/http_simple.c $(SRC_DIR)/httpserver.c
 DEBUG_SRCS      = $(TOOLS_DIR)/cache_debug.c
 
 # Output binaries
@@ -23,8 +23,8 @@ HTTPCLIENT_BIN = $(BUILD_DIR)/httpclient
 DEBUG_BIN      = $(BUILD_DIR)/cache_debug
 
 # Build flags
-CFLAGS = -Wall -O2 -g
-LDFLAGS =  
+CFLAGS = -Wall -O2 -g -pthread
+LDFLAGS = -pthread
 
 # Ensure the build directory exists
 $(BUILD_DIR):

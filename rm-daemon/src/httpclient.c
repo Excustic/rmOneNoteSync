@@ -3,6 +3,7 @@
 #include "http_simple.h"
 #include "metadata_parser.h"
 #include "version.h"
+#include "httpserver.h"
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -340,6 +341,10 @@ int main(int argc, char **argv) {
   int queued = cache_count_pages(cache);
   log_msg("Cache status: %d pages queued", queued);
 
+  // Start HTTP Server
+  httpserver_init(cache, &config.whitelist_count, config.whitelist);
+  httpserver_start(8000); 
+
   // Main loop
   while (keep_running) {
     log_msg("--- Sync cycle starting ---");
@@ -369,6 +374,7 @@ int main(int argc, char **argv) {
 
   // Cleanup
   log_msg("Shutdown signal received, cleaning up...");
+  httpserver_stop();
   cache_close(cache, true);
   log_msg("=== HTTP Client stopped ===");
 

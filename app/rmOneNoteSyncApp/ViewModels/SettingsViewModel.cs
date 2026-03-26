@@ -34,6 +34,9 @@ public partial class SettingsViewModel : ViewModelBase
     private int _syncIntervalSeconds;
 
     [ObservableProperty]
+    private int _syncServerPort;
+
+    [ObservableProperty]
     private bool _autoSync;
 
     [ObservableProperty]
@@ -143,6 +146,7 @@ public partial class SettingsViewModel : ViewModelBase
             _configuration = config;
             EnableWifiSync = config.EnableWifiSync;
             SyncIntervalSeconds = config.SyncIntervalSeconds;
+            SyncServerPort = config.SyncServerPort;
             AutoSync = config.AutoSync;
             MaxCacheSizeMB = config.MaxCacheSizeMB;
             CacheRetentionDays = config.CacheRetentionDays;
@@ -216,6 +220,7 @@ public partial class SettingsViewModel : ViewModelBase
     {
         _configuration.EnableWifiSync = EnableWifiSync;
         _configuration.SyncIntervalSeconds = SyncIntervalSeconds;
+        _configuration.SyncServerPort = SyncServerPort;
         _configuration.AutoSync = AutoSync;
         _configuration.MaxCacheSizeMB = MaxCacheSizeMB;
         _configuration.CacheRetentionDays = CacheRetentionDays;
