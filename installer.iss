@@ -41,13 +41,18 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-; Add firewall rule on install (profile=any is required because the reMarkable USB connection defaults to a "Public" network)
+; 1. Add firewall rule (Lets traffic into the machine)
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""rmOneNoteSync"" dir=in action=allow protocol=TCP localport=34983 profile=any"; Flags: runhidden
 
+; 2. Add URL ACL (Lets a standard non-admin user bind to the HTTP port)
+Filename: "netsh"; Parameters: "http add urlacl url=http://+:34983/ sddl=""D:(A;;GX;;;WD)"""; Flags: runhidden
+
 [UninstallRun]
-; Remove the firewall rule when the user uninstalls the app
+; 1. Remove the firewall rule
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""rmOneNoteSync"" protocol=TCP localport=34983"; Flags: runhidden
 
+; 2. Remove the URL ACL
+Filename: "netsh"; Parameters: "http delete urlacl url=http://+:34983/"; Flags: runhidden
 [UninstallDelete]
 ; 1. Delete any leftover files (like runtime logs) the app created in the installation folder
 Type: filesandordirs; Name: "{app}\*"
