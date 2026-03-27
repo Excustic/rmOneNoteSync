@@ -45,7 +45,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""rmOneNoteSync"" dir=in action=allow protocol=TCP localport=34983 profile=any"; Flags: runhidden
 
 ; 2. Add URL ACL (Lets a standard non-admin user bind to the HTTP port)
-Filename: "netsh"; Parameters: "http add urlacl url=http://+:34983/ sddl=""D:(A;;GX;;;WD)"""; Flags: runhidden
+Filename: "netsh"; Parameters: "http add urlacl url=http://+:34983/ sddl=D:(A;;GX;;;WD)"; Flags: runhidden
 
 [UninstallRun]
 ; 1. Remove the firewall rule
