@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -10,6 +11,9 @@ using rmOneNoteSyncApp.Services.Interfaces;
 using rmOneNoteSyncApp.Services;
 using Microsoft.Extensions.Logging;
 using System.Threading;
+using Avalonia.Controls.ApplicationLifetimes;
+using rmOneNoteSyncApp.Views;
+using Avalonia;
 
 namespace rmOneNoteSyncApp.ViewModels;
 
@@ -17,7 +21,9 @@ public partial class DashboardViewModel : ViewModelBase
 {
     private readonly IDatabaseService _databaseService;
     private readonly ISshService _sshService;
+    private readonly IConfigurationProviderService _configProvider;
     private readonly ISyncServerService _syncServer;
+    private readonly ISyncService _syncService;
     private readonly IDeviceDetectionService _detectionService;
     private readonly ILogger<DashboardViewModel> _logger;
 
@@ -52,7 +58,10 @@ public partial class DashboardViewModel : ViewModelBase
     private int _pendingDocuments;
 
     [ObservableProperty]
-    private string _lastSyncTime = "Never";
+    private string _syncedStatsText = "0 Notebooks, 0 Documents, 0 Pages";
+
+    [ObservableProperty]
+    private string _unsyncedStatsText = "0 Notebooks, 0 Documents, 0 Pages";
 
     [ObservableProperty]
     private bool _requiresManualScan;
@@ -62,18 +71,23 @@ public partial class DashboardViewModel : ViewModelBase
     private ObservableCollection<ActivityItem> _recentActivities = new();
 
     [ObservableProperty]
-    private ObservableCollection<DocumentMetadata> _trackedNotebooks = new();
+    private ObservableCollection<DocumentMetadata> _syncedNotebooks = new();
+
+    [ObservableProperty]
+    private ObservableCollection<DocumentMetadata> _unsyncedNotebooks = new();
 
     private int _isLoadingDashboardData;
     private string _lastLogFileName = string.Empty;
     private long _lastLogFilePosition = 0;
     private const int MaxLogItems = 1000;
     private const int REFRESH_INTERVAL_SECONDS = 30;
-    public DashboardViewModel(IDatabaseService databaseService, ISshService sshService, ISyncServerService syncServer, IDeviceDetectionService detectionService, ILogger<DashboardViewModel> logger)
+    public DashboardViewModel(IDatabaseService databaseService, ISshService sshService, IConfigurationProviderService configProvider, ISyncServerService syncServer, ISyncService syncService, IDeviceDetectionService detectionService, ILogger<DashboardViewModel> logger)
     {
         _databaseService = databaseService;
         _sshService = sshService;
+        _configProvider = configProvider;
         _syncServer = syncServer;
+        _syncService = syncService;
         _detectionService = detectionService;
         _logger = logger;
 
@@ -108,6 +122,11 @@ public partial class DashboardViewModel : ViewModelBase
 
         };
 
+        _syncService.SyncCompleted += (sender, e) =>
+        {
+            Task.Run(LoadDashboardDataAsync);
+        };
+
         Task.Delay(2000).ContinueWith(async _ => await LoadDashboardDataAsync());
 
         Task.Run(async () =>
@@ -119,6 +138,16 @@ public partial class DashboardViewModel : ViewModelBase
             }
             while (await timer.WaitForNextTickAsync());
         });
+
+        if (App.ServiceProvider?.GetService<FolderPickerViewModel>() is { } vmFolderPicker)
+        {
+
+            if (vmFolderPicker != null)
+                vmFolderPicker.Folders.CollectionChanged += (sender, e) =>
+                {
+                    Task.Run(LoadDashboardDataAsync);
+                };
+        }
     }
     [RelayCommand]
     private async Task RefreshRecentActivity()
@@ -248,34 +277,97 @@ public partial class DashboardViewModel : ViewModelBase
                 DeviceIp = _detectionService.IsConnected ? _detectionService.CurrentDevice?.IpAddress ?? "--" : config != null ? config.DeviceIp : "--";
 
                 TotalDocuments = config?.SyncFiles.Count ?? 0;
-
                 TotalPages = documents.Sum(doc => doc.Pages.Count);
-
                 PendingDocuments = pendingPages.Count;
                 SyncedDocuments = uploadedPages.Count;
 
-                var lastUpload = uploadedPages.OrderByDescending(p => p.LastSyncTime).FirstOrDefault();
-                if (lastUpload != null && lastUpload.LastSyncTime.HasValue)
-                {
-                    LastSyncTime = "Last: " + lastUpload.LastSyncTime.Value.ToString("dd MMM yyyy, HH:mm");
-                }
-                else
-                {
-                    LastSyncTime = "Last: Never";
-                }
-
                 if (config != null)
                 {
-                    var whitelistedNotebooks = documents
-                        .Where(d => d.Type == "CollectionType" && config.SyncFiles.Contains(d.DocumentId))
-                        .OrderByDescending(d => d.LastModified)
-                        .ToList();
+                    var allFolders = documents.Where(d => d.Type == "CollectionType").ToList();
+                    var allFiles = documents.Where(d => d.Type == "DocumentType").ToList();
 
-                    TrackedNotebooks = [.. whitelistedNotebooks];
+                    // Group files by parent to identify document-bearing folders
+                    var filesByParent = allFiles.GroupBy(d => d.Parent).ToDictionary(g => g.Key ?? "", g => g.ToList());
+
+                    var notebookEntries = new List<dynamic>();
+
+                    // 1. Process folders that contain documents
+                    foreach (var folder in allFolders)
+                    {
+                        if (filesByParent.TryGetValue(folder.DocumentId, out var children))
+                        {
+                            var latestChild = children.OrderByDescending(c => c.LastModified).First();
+                            var lastMod = latestChild.LastModified;
+
+                            var numDocs = children.Count;
+                            //var numPages = children.Sum(d => d.Pages.Count);
+
+                            // Check if folder or any child is synced/selected
+                            var isSynced = !string.IsNullOrEmpty(folder.OneNoteUrl) || children.Any(d => !string.IsNullOrEmpty(d.OneNoteUrl));
+                            var isSelected = config.SyncFiles.Contains(folder.DocumentId) || children.Any(d => config.SyncFiles.Contains(d.DocumentId));
+
+                            var meta = folder;
+                            meta.CustomMetadata["TotalDocs"] = numDocs;
+                            //meta.CustomMetadata["TotalPages"] = numPages;
+
+                            if (isSynced)
+                            {
+                                meta.CustomMetadata["OneNoteUrl"] = folder.OneNoteUrl ?? latestChild.OneNoteUrl ?? "synced";
+                                meta.CustomMetadata["LastSyncTime"] = lastMod.ToString("dd MMM yyyy, HH:mm");
+                            }
+
+                            notebookEntries.Add(new { Meta = meta, IsSelected = isSelected });
+
+                            // Remove from processed groups
+                            filesByParent.Remove(folder.DocumentId);
+                        }
+                    }
+
+                    // 2. Process root-level files (parent is "" or missing)
+                    if (filesByParent.TryGetValue("", out var rootFiles))
+                    {
+                        foreach (var file in rootFiles)
+                        {
+                            var meta = file;
+                            // Even though it's technically a DocumentType, we present it as a 'Notebook' card here
+                            meta.CustomMetadata["TotalDocs"] = 1;
+                            //meta.CustomMetadata["TotalPages"] = file.Pages.Count;
+
+                            var isSynced = !string.IsNullOrEmpty(file.OneNoteUrl);
+                            var isSelected = config.SyncFiles.Contains(file.DocumentId);
+
+                            if (isSynced)
+                            {
+                                meta.CustomMetadata["LastSyncTime"] = file.LastModified.ToString("dd MMM yyyy, HH:mm");
+                            }
+
+                            notebookEntries.Add(new { Meta = meta, IsSelected = isSelected });
+                        }
+                    }
+
+                    var synced = notebookEntries.Where(n => n.Meta.CustomMetadata.ContainsKey("OneNoteUrl") || n.IsSelected)
+                        .Select(n => (DocumentMetadata)n.Meta)
+                        .OrderByDescending(n => n.LastModified)
+                        .ToList();
+                    var unsynced = notebookEntries.Where(n => !synced.Contains(n.Meta)).Select(n => (DocumentMetadata)n.Meta).OrderByDescending(n => n.LastModified).ToList();
+
+                    SyncedNotebooks = [.. synced];
+                    UnsyncedNotebooks = [.. unsynced];
+
+                    var syncedDocsCount = synced.Sum(n => n.CustomMetadata.TryGetValue("TotalDocs", out object? value) ? Convert.ToInt32(value) : 0);
+                    //var syncedPagesCount = synced.Sum(n => n.CustomMetadata.TryGetValue("TotalPages", out object? value) ? Convert.ToInt32(value) : 0);
+                    SyncedStatsText = $"{synced.Count} Notebooks, {syncedDocsCount} Documents";
+
+                    var unsyncedDocsCount = unsynced.Sum(n => n.CustomMetadata.TryGetValue("TotalDocs", out object? value) ? Convert.ToInt32(value) : 0);
+                    //var unsyncedPagesCount = unsynced.Sum(n => n.CustomMetadata.TryGetValue("TotalPages", out object? value) ? Convert.ToInt32(value) : 0);
+                    UnsyncedStatsText = $"{unsynced.Count} Notebooks, {unsyncedDocsCount} Documents";
                 }
                 else
                 {
-                    TrackedNotebooks = [];
+                    SyncedNotebooks = [];
+                    UnsyncedNotebooks = [];
+                    SyncedStatsText = "0 Notebooks, 0 Documents, 0 Pages";
+                    UnsyncedStatsText = "0 Notebooks, 0 Documents, 0 Pages";
                 }
             });
 
@@ -394,7 +486,7 @@ public partial class DashboardViewModel : ViewModelBase
         if (topLevel == null) return;
 
         var dialog = new Views.ManualSyncWindow();
-        var vm = new ManualSyncViewModel(dialog, document, _detectionService, _databaseService, _logger);
+        var vm = new ManualSyncViewModel(dialog, document, _detectionService, _databaseService, _configProvider, _logger);
         dialog.DataContext = vm;
 
         var result = await dialog.ShowDialog<bool>(topLevel);
@@ -403,6 +495,38 @@ public partial class DashboardViewModel : ViewModelBase
             var mainVm = App.ServiceProvider?.GetService<MainViewModel>();
             mainVm?.NavigateCommand.Execute("SyncStatus");
             await SyncNowAsync();
+        }
+    }
+
+    [RelayCommand]
+    private async Task BeginRename(DocumentMetadata document)
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop && desktop.MainWindow != null)
+        {
+            var currentName = document.CustomMetadata.TryGetValue("CustomOneNoteName", out var cName) ? cName?.ToString() : document.VisibleName;
+
+            var dialog = new InputDialogWindow
+            {
+                DataContext = new InputDialogViewModel
+                {
+                    Title = "Rename Notebook",
+                    Message = $"Enter a new name for '{document.VisibleName}':\n(Note: If this notebook is already synced, renaming it locally will not automatically change its name in OneNote due to API limitations).",
+                    InputText = currentName ?? document.VisibleName,
+                    Watermark = "New Notebook Name"
+                }
+            };
+
+            var result = await dialog.ShowDialog<string?>(desktop.MainWindow);
+            if (!string.IsNullOrWhiteSpace(result) && result != currentName)
+            {
+                document.CustomMetadata["CustomOneNoteName"] = result;
+                // Force UI update of VisibleName binding if that's what's shown, but wait, the property uses VisibleName? Let's also update VisibleName for UI display.
+                document.VisibleName = result;
+                await _databaseService.SaveDocumentMetadataAsync(document);
+                _logger.LogInformation("Notebook {DocumentId} renamed locally to {NewName}", document.DocumentId, result);
+
+                await LoadDashboardDataAsync();
+            }
         }
     }
 }

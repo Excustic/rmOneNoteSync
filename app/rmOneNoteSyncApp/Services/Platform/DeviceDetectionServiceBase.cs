@@ -30,7 +30,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
     private bool _requiresManualScan;
     public bool RequiresManualScan => _requiresManualScan;
 
-    protected const string REMARKABLE_USB_IP = "10.11.99.1";
+    protected const string REMARKABLE_USB_IP = AppSettings.DefaultDeviceIp;
 
     public event EventHandler<DeviceConnectionEventArgs>? DeviceConnectionChanged;
     private bool _isConnected;

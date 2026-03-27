@@ -5,8 +5,8 @@
              x:DataType="vm:SettingsViewModel">
     
     
-    <ScrollViewer Padding="30" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="20">
+    <ScrollViewer Padding="30,0,30,0" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="20" Margin="0,30,0,30">
             <TextBlock Classes="section-title" Text="Settings"/>
             
             <!-- Device Settings -->
@@ -34,7 +34,46 @@
                             </Transitions>
                         </Button.Transitions>
                     </Button>
-                    
+
+                    <Button Content="{Binding ResetConfigButtonText}" 
+                        Command="{Binding ResetConfigCommand}"
+                        Background="{Binding ResetConfigButtonBg}" 
+                        Foreground="{Binding ResetConfigButtonFg}"
+                        HorizontalAlignment="Left" Cursor="Hand">
+                        <Button.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="Background" Duration="0:0:0.2"/>
+                                <BrushTransition Property="Foreground" Duration="0:0:0.2"/>
+                            </Transitions>
+                        </Button.Transitions>
+                    </Button>
+
+                    <!-- Upload Settings Section -->
+                    <TextBlock Text="Upload Settings" FontSize="16" FontWeight="SemiBold" Margin="0,15,0,5"/>
+                    <TextBlock Text="These values are written to the device configuration file (httpclient.conf) each time settings are saved."
+                               Foreground="#6b7280" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,5"/>
+
+                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="15">
+                        <StackPanel Grid.Column="0" Spacing="4">
+                            <TextBlock Text="Max Retries" Foreground="#6b7280" FontSize="12"/>
+                            <NumericUpDown Value="{Binding MaxRetries}"
+                                          Minimum="1" Maximum="20" Increment="1"
+                                          Width="130" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <TextBlock Text="Retry Delay (s)" Foreground="#6b7280" FontSize="12"/>
+                            <NumericUpDown Value="{Binding RetryDelaySeconds}"
+                                          Minimum="1" Maximum="120" Increment="1"
+                                          Width="130" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Spacing="4">
+                            <TextBlock Text="Timeout (s)" Foreground="#6b7280" FontSize="12"/>
+                            <NumericUpDown Value="{Binding TimeoutSeconds}"
+                                          Minimum="1" Maximum="120" Increment="1"
+                                          Width="130" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                    </Grid>
+
                     <!-- Service Management Section -->
                     <TextBlock Text="Service Management" FontSize="16" FontWeight="SemiBold" Margin="0,15,0,10"/>
                     
@@ -113,6 +152,8 @@
                                       Increment="1"
                                       Width="150"
                                       HorizontalAlignment="Left"/>
+                        <TextBlock Text="⚠️ Changing the port requires manual firewall configuration. Please ensure this port is open for TCP traffic."
+                                   Foreground="#d97706" FontSize="12" TextWrapping="Wrap"/>
                     </StackPanel>
                     
                     <StackPanel Spacing="5">

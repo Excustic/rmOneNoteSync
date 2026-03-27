@@ -43,7 +43,7 @@ public class LinuxDeviceDetectionService : DeviceDetectionServiceBase
 
     public override async Task StartMonitoringAsync()
     {
-        await base.StartMonitoringAsync();
+        _ = base.StartMonitoringAsync();
 
         // Monitor /sys/class/net for network interface changes
         try
@@ -56,7 +56,7 @@ public class LinuxDeviceDetectionService : DeviceDetectionServiceBase
                 {
                     if (e.Name?.StartsWith("usb") == true || e.Name?.StartsWith("enp") == true)
                     {
-                        await Task.Delay(1000); // Give interface time to come up
+                        await Task.Delay(50); // Give interface time to come up
                         await CheckConnectionAsync();
                     }
                 };

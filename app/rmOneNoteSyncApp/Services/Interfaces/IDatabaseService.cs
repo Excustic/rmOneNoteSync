@@ -28,6 +28,7 @@ public interface IDatabaseService
     Task<DocumentMetadata?> GetDocumentMetadataAsync(string documentId);
     Task<List<DocumentMetadata>> GetAllDocumentsAsync();
     Task SaveDocumentMetadataAsync(DocumentMetadata metadata);
+    Task UpsertFileTreeAsync(IEnumerable<DocumentMetadata> documents);
 
     // Cache management
     Task<long> GetCacheSizeAsync();

@@ -49,6 +49,20 @@ public partial class SettingsViewModel : ViewModelBase
     private bool _keepLocalCopies;
 
     [ObservableProperty]
+    private int _maxRetries;
+
+    [ObservableProperty]
+    private int _retryDelaySeconds;
+
+    [ObservableProperty]
+    private int _timeoutSeconds;
+
+    private bool _isResettingConfig;
+    [ObservableProperty] private string _resetConfigButtonText = "Reset to Defaults";
+    [ObservableProperty] private string _resetConfigButtonBg = "#f3f4f6";
+    [ObservableProperty] private string _resetConfigButtonFg = "#374151";
+
+    [ObservableProperty]
     private bool _isDeviceConnected;
 
     [ObservableProperty]
@@ -151,6 +165,9 @@ public partial class SettingsViewModel : ViewModelBase
             MaxCacheSizeMB = config.MaxCacheSizeMB;
             CacheRetentionDays = config.CacheRetentionDays;
             KeepLocalCopies = config.KeepLocalCopies;
+            MaxRetries = config.MaxRetries;
+            RetryDelaySeconds = config.RetryDelaySeconds;
+            TimeoutSeconds = config.TimeoutSeconds;
         }
     }
     [RelayCommand]
@@ -225,6 +242,9 @@ public partial class SettingsViewModel : ViewModelBase
         _configuration.MaxCacheSizeMB = MaxCacheSizeMB;
         _configuration.CacheRetentionDays = CacheRetentionDays;
         _configuration.KeepLocalCopies = KeepLocalCopies;
+        _configuration.MaxRetries = MaxRetries;
+        _configuration.RetryDelaySeconds = RetryDelaySeconds;
+        _configuration.TimeoutSeconds = TimeoutSeconds;
 
         // 1. Loading State
         SaveSettingsButtonText = "Saving...";
@@ -270,6 +290,55 @@ public partial class SettingsViewModel : ViewModelBase
 
         _logger?.LogInformation("Settings saved.");
 
+    }
+
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task ResetConfigAsync()
+    {
+        if (_isResettingConfig) return;
+        _isResettingConfig = true;
+
+        ResetConfigButtonText = "Resetting...";
+        ResetConfigButtonBg = "#fef08a";
+        ResetConfigButtonFg = "#854d0e";
+
+        try
+        {
+            MaxRetries = 3;
+            RetryDelaySeconds = 5;
+            TimeoutSeconds = 10;
+            SyncIntervalSeconds = 300;
+            AutoSync = true;
+            EnableWifiSync = true;
+
+            if (_configuration != null)
+            {
+                _configuration.MaxRetries = MaxRetries;
+                _configuration.RetryDelaySeconds = RetryDelaySeconds;
+                _configuration.TimeoutSeconds = TimeoutSeconds;
+                _configuration.SyncIntervalSeconds = SyncIntervalSeconds;
+                _configuration.AutoSync = AutoSync;
+                _configuration.EnableWifiSync = EnableWifiSync;
+                await _databaseService.SaveConfigurationAsync(_configuration);
+            }
+
+            ResetConfigButtonText = "✅ Reset Done";
+            ResetConfigButtonBg = "#16a34a";
+            ResetConfigButtonFg = "#ffffff";
+        }
+        catch
+        {
+            ResetConfigButtonText = "❌ Failed";
+            ResetConfigButtonBg = "#ef4444";
+            ResetConfigButtonFg = "#ffffff";
+        }
+
+        await Task.Delay(2500);
+
+        ResetConfigButtonText = "Reset to Defaults";
+        ResetConfigButtonBg = "#f3f4f6";
+        ResetConfigButtonFg = "#374151";
+        _isResettingConfig = false;
     }
 
     [RelayCommand]
@@ -396,7 +465,7 @@ public partial class SettingsViewModel : ViewModelBase
         await Task.Delay(2500);
 
         // 4. Revert to Default State
-        ClearCacheButtonText = "Clear Device Sync Cache";
+        ClearCacheButtonText = "Clear DB Cache";
         ClearCacheButtonBg = "#f3f4f6";
         ClearCacheButtonFg = "#374151";
 

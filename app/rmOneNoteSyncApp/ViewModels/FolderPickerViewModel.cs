@@ -22,6 +22,7 @@ public partial class FolderPickerViewModel : ViewModelBase
     private readonly ILogger<FolderPickerViewModel>? _logger;
     private readonly IDeviceDetectionService _deviceDetectionService;
     private SyncConfiguration? _syncConfiguration;
+    private readonly IConfigurationProviderService _configProvider;
 
     [ObservableProperty]
     private ObservableCollection<FileNode> _folders = new();
@@ -50,7 +51,7 @@ public partial class FolderPickerViewModel : ViewModelBase
     // Can only load folders if connected and not already loading
     public bool CanLoadFolders => IsConnected && !IsLoading;
 
-    public FolderPickerViewModel(ISshService sshService, IDatabaseService databaseService, IDeviceDetectionService deviceDetectionService)
+    public FolderPickerViewModel(ISshService sshService, IDatabaseService databaseService, IDeviceDetectionService deviceDetectionService, IConfigurationProviderService configurationProviderService)
     {
         _sshService = sshService;
         _databaseService = databaseService;
@@ -115,63 +116,71 @@ public partial class FolderPickerViewModel : ViewModelBase
                 return;
             }
 
-            _logger?.LogDebug("Loading folder structure from reMarkable");
+            _logger?.LogDebug("Loading folder structure from reMarkable via HTTP API");
 
-            // Get all metadata files
-            var findCommand = "find /home/root/.local/share/remarkable/xochitl -name '*.metadata' -type f 2>/dev/null";
-            var metadataFiles = await _sshService.ExecuteCommandAsync(findCommand);
-
-            if (string.IsNullOrWhiteSpace(metadataFiles))
-            {
-                StatusMessage = "No documents found on device";
-                return;
-            }
-
-            var lines = metadataFiles.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            _logger?.LogDebug("Found {Count} metadata files", lines.Length);
-
+            // We fallback to DefaultDeviceIp if not detected
+            var deviceIp = _deviceDetectionService.CurrentDevice?.IpAddress ?? AppSettings.DefaultDeviceIp;
             var allNodes = new List<FileNode>();
             var nodeMap = new Dictionary<string, FileNode>();
 
-            // Process each metadata file
-            foreach (var metadataPath in lines)
+            try
             {
-                try
+                using var filetreeClient = new HttpClient();
+                filetreeClient.Timeout = TimeSpan.FromSeconds(10);
+                var responseStr = await filetreeClient.GetStringAsync($"http://{deviceIp}:8000/filetree");
+
+                using var doc = JsonDocument.Parse(responseStr);
+                foreach (var item in doc.RootElement.EnumerateArray())
                 {
-                    // Extract document ID from path
-                    var fileName = System.IO.Path.GetFileName(metadataPath);
-                    var docId = fileName.Replace(".metadata", "");
+                    var id = item.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "";
+                    var name = item.TryGetProperty("visibleName", out var nameProp) ? nameProp.GetString() ?? "Untitled" : "Untitled";
+                    var type = item.TryGetProperty("type", out var typeProp) ? typeProp.GetString() ?? "" : "";
+                    var parent = item.TryGetProperty("parent", out var parentProp) ? parentProp.GetString() : null;
+                    var lastModifiedStr = item.TryGetProperty("lastModified", out var lmProp) ? lmProp.GetString() : "0";
 
-                    // Read metadata content
-                    var content = await _sshService.ExecuteCommandAsync($"cat '{metadataPath}'");
-                    if (string.IsNullOrWhiteSpace(content))
-                        continue;
+                    if (string.IsNullOrWhiteSpace(parent) || parent == "trash")
+                        parent = null;
 
-                    // Parse metadata
-                    var node = ParseMetadataToNode(docId, content);
-                    if (node != null)
+                    var node = new FileNode
                     {
-                        // Check if it's a native notebook (the directory exists)
-                        if (!node.IsFolder)
-                        {
-                            var checkDir = await _sshService.ExecuteCommandAsync($"[ -d \"/home/root/.local/share/remarkable/xochitl/{docId}\" ] && echo 'yes' || echo 'no'");
-                            node.IsNotebook = checkDir.Trim() == "yes";
-                        }
+                        Id = id,
+                        Name = name,
+                        Path = id,
+                        IsFolder = type == "CollectionType",
+                        ParentId = parent,
+                        IsNotebook = type != "CollectionType" // We infer DocumentType as Notebook
+                    };
 
-                        allNodes.Add(node);
-                        nodeMap[node.Id] = node;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger?.LogWarning(ex, "Failed to process metadata file: {Path}", metadataPath);
+                    allNodes.Add(node);
+                    nodeMap[node.Id] = node;
                 }
             }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to fetch filetree from HTTP API on {DeviceIp}. Check if daemon is running.", deviceIp);
+                StatusMessage = "Failed to fetch file tree via HTTP. Is rm-daemon running?";
+                return;
+            }
 
-            // Build hierarchy
+            // Build hierarchy FIRST
             var rootNodes = BuildHierarchy(allNodes, nodeMap);
 
-            var deviceIp = _deviceDetectionService.CurrentDevice?.IpAddress ?? "10.11.99.1";
+            // Compute Virtual Paths
+            ComputeVirtualPaths(rootNodes, "");
+
+            // Ensure we sync the DB cache with the full tree so it's fully populated offline
+            var documentMetaDataNodes = allNodes.Select(n => new DocumentMetadata
+            {
+                DocumentId = n.Id,
+                VisibleName = n.Name,
+                Type = n.IsFolder ? "CollectionType" : "DocumentType",
+                Parent = n.ParentId ?? "",
+                VirtualPath = n.VirtualPath ?? "", // Populated via ComputeVirtualPaths
+                LastModified = DateTime.UtcNow
+            }).ToList();
+
+            await _databaseService.UpsertFileTreeAsync(documentMetaDataNodes);
+
             var whitelist = new List<string>();
             try
             {
@@ -231,6 +240,20 @@ public partial class FolderPickerViewModel : ViewModelBase
                 LoadFoldersCommand.NotifyCanExecuteChanged();
                 OnFoldersChanged(Folders);
             });
+        }
+    }
+
+    private void ComputeVirtualPaths(IEnumerable<FileNode> nodes, string currentPath)
+    {
+        foreach (var node in nodes)
+        {
+            var nodePath = string.IsNullOrEmpty(currentPath) ? node.Name : $"{currentPath}/{node.Name}";
+            node.VirtualPath = nodePath;
+
+            if (node.Children?.Count > 0)
+            {
+                ComputeVirtualPaths(node.Children, nodePath);
+            }
         }
     }
 
@@ -426,28 +449,33 @@ public partial class FolderPickerViewModel : ViewModelBase
             SaveButtonText = "Saving...";
             SaveButtonBg = "#f3f4f6";
             SaveButtonFg = "#374151";
-            // Collect all selected document IDs and their FileNodes
-            var selectedIds = new List<string>();
-            var selectedNodes = new List<FileNode>();
+            var selectedDocIds = new List<string>();
+            var selectedFolders = new List<FileNode>();
+
             foreach (var root in Folders)
             {
-                var nodes = root.GetSelectedDocuments();
-                selectedNodes.AddRange(nodes);
-                selectedIds.AddRange(nodes.Select(n => n.Id));
+                var (docs, folders) = root.GetSelectedItems();
+                selectedDocIds.AddRange(docs.Select(n => n.Id));
+                selectedDocIds.AddRange(folders.Select(f => f.Id));
+                selectedFolders.AddRange(folders);
             }
 
-            _logger?.LogDebug("Saving selection: {Count} documents", selectedIds.Count);
+            _logger?.LogDebug("Saving selection: {Count} documents across {FCount} folders", selectedDocIds.Count, selectedFolders.Count);
 
             // Save to database
             var config = await _databaseService.GetConfigurationAsync() ?? new SyncConfiguration();
-            config.SyncFiles = selectedIds;
+            // Distinct just in case
+            config.SyncFiles = selectedDocIds.Distinct().ToList();
             await _databaseService.SaveConfigurationAsync(config);
 
             // Create stub DocumentMetadata so new Notebooks appear on the Dashboard instantly
             var existingDocs = await _databaseService.GetAllDocumentsAsync();
             var existingIds = existingDocs.Select(d => d.DocumentId).ToHashSet();
-            
-            foreach (var node in selectedNodes)
+
+            // Deduplicate folders (just in case)
+            var uniqueFolders = selectedFolders.GroupBy(f => f.Id).Select(g => g.First()).ToList();
+
+            foreach (var node in uniqueFolders)
             {
                 if (!existingIds.Contains(node.Id))
                 {
@@ -457,25 +485,25 @@ public partial class FolderPickerViewModel : ViewModelBase
                         VisibleName = node.Name,
                         Type = "CollectionType",
                         Parent = node.ParentId ?? "",
+                        VirtualPath = node.Path,
                         LastModified = DateTime.UtcNow
                     });
                 }
             }
 
-            StatusMessage = $"Saved {selectedIds.Count} documents to sync";
+            StatusMessage = $"Saved {selectedDocIds.Count} documents to sync";
 
             // IMPORTANT: Update the reMarkable configuration
             if (_sshService.IsConnected)
             {
                 StatusMessage = "Updating reMarkable configuration...";
 
-                var configProvider = App.ServiceProvider?.GetService<IConfigurationProviderService>();
-                if (configProvider != null)
+                if (_configProvider != null)
                 {
-                    var success = await configProvider.UpdateDeviceConfigurationAsync();
+                    var success = await _configProvider.UpdateDeviceConfigurationAsync();
                     if (success)
                     {
-                        StatusMessage = $"✅ Configuration synced to reMarkable! {selectedIds.Count} documents will sync.";
+                        StatusMessage = $"✅ Configuration synced to reMarkable! {selectedDocIds.Count} documents will sync.";
                         _logger?.LogInformation("Successfully updated reMarkable configuration");
 
                         SaveButtonText = "✅ Selection Saved";
@@ -558,6 +586,9 @@ public partial class FileNode : ObservableObject
     private bool? _selectionState = false;
 
     [ObservableProperty]
+    private string _virtualPath = "";
+
+    [ObservableProperty]
     private ObservableCollection<FileNode>? _children;
 
     public string? ParentId { get; set; }
@@ -607,24 +638,38 @@ public partial class FileNode : ObservableObject
         }
     }
 
-    // Get all selected documents recursively
-    public List<FileNode> GetSelectedDocuments()
+    // Get all selected items recursively (returns both documents and parent folders containing selected documents)
+    public (List<FileNode> documents, List<FileNode> folders) GetSelectedItems()
     {
-        var nodes = new List<FileNode>();
+        var docs = new List<FileNode>();
+        var folders = new List<FileNode>();
 
         if (!IsFolder && SelectionState == true)
         {
-            nodes.Add(this);
+            docs.Add(this);
         }
 
         if (Children != null)
         {
+            bool hasSelectedChildren = false;
             foreach (var child in Children)
             {
-                nodes.AddRange(child.GetSelectedDocuments());
+                var (childDocs, childFolders) = child.GetSelectedItems();
+                if (childDocs.Count > 0)
+                {
+                    hasSelectedChildren = true;
+                    docs.AddRange(childDocs);
+                    folders.AddRange(childFolders);
+                }
+            }
+
+            // If this is a folder and contains selected documents, include it
+            if (IsFolder && hasSelectedChildren)
+            {
+                folders.Add(this);
             }
         }
 
-        return nodes;
+        return (docs, folders);
     }
 }

@@ -286,13 +286,6 @@ public partial class SyncStatusViewModel : ViewModelBase
             {
                 TotalPendingPages--;
                 TotalUploadedPages++;
-
-                // Refresh dashboard to reflect new URL and updated counts
-                var dashboardVm = App.ServiceProvider?.GetService<DashboardViewModel>();
-                if (dashboardVm != null)
-                {
-                    Task.Run(dashboardVm.LoadDashboardDataAsync);
-                }
             }
             else
             {

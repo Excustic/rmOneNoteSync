@@ -40,7 +40,7 @@ public class WindowsDeviceDetectionService(ILogger<WindowsDeviceDetectionService
 
     public override async Task StartMonitoringAsync()
     {
-        await base.StartMonitoringAsync();
+        _ = base.StartMonitoringAsync();
 
         // Set up WMI watcher for USB device events
         try

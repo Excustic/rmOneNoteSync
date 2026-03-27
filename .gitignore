@@ -16,4 +16,4 @@ rm-daemon/release/
 # Logs & Testing
 *.log
 rm-daemon/bugs/
-rm-daemon/testing_tools/uploads/
+rm-daemon/testing_tools/uploads/temp_repo/

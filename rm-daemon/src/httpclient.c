@@ -263,6 +263,11 @@ int process_pending_pages() {
       }
     }
 
+    // If page_num is empty (e.g., manual sync), try to populate it
+    if (page->page_num[0] == '\0') {
+      parse_content_file(doc_id, page->uuid, page->page_num, sizeof(page->page_num));
+    }
+
     // Reconstruct virtual path
     path_info_t path_info;
     if (reconstruct_virtual_path(doc_id, page->page_num, &path_info) != 0) {

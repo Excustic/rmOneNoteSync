@@ -121,8 +121,8 @@ class Program
         }
         finally
         {
-            _mutex?.ReleaseMutex();
-            _mutex?.Dispose();
+            _lockFile.Unlock(0, 0);
+            _lockFile.Dispose();
         }
     }
 

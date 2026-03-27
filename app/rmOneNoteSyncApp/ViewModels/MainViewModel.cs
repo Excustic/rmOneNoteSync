@@ -177,7 +177,7 @@ public partial class MainViewModel : ViewModelBase
             await _detectionService.StartMonitoringAsync();
             if (!ShowSetupScreen)
             {
-                if (config != null && config.AutoSync)
+                if (config == null || config.AutoSync)
                 {
                     _logger.LogDebug("Initializing Automatic Sync (Interval: {Interval}s)", config.SyncIntervalSeconds);
                     _ = _syncService.StartAutomaticSyncAsync(config.SyncIntervalSeconds);
@@ -440,7 +440,7 @@ public partial class MainViewModel : ViewModelBase
                 // Save configuration
                 var config = new SyncConfiguration
                 {
-                    DeviceIp = CurrentDevice?.IpAddress ?? "10.11.99.1",
+                    DeviceIp = CurrentDevice?.IpAddress ?? AppSettings.DefaultDeviceIp,
                     DevicePassword = this.DevicePassword,
                     DeviceMacAddress = _fetchedMacAddress,
                     EnableWifiSync = EnableWifi,

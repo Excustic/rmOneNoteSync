@@ -50,7 +50,7 @@ public class MacOSDeviceDetectionService : DeviceDetectionServiceBase
 
     public override async Task StartMonitoringAsync()
     {
-        await base.StartMonitoringAsync();
+        _ = base.StartMonitoringAsync();
 
         // macOS doesn't have as convenient USB monitoring as Windows/Linux
         // We rely on the base class polling mechanism

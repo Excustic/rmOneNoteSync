@@ -15,6 +15,7 @@ public class SqliteDatabaseService : IDatabaseService
 {
     private readonly ILogger<SqliteDatabaseService> _logger;
     private string? _databasePath;
+    private string ConnectionString => $"Data Source={_databasePath};Cache=Shared;";
 
     public SqliteDatabaseService(ILogger<SqliteDatabaseService> logger)
     {
@@ -64,6 +65,7 @@ public class SqliteDatabaseService : IDatabaseService
                 VisibleName TEXT NOT NULL,
                 Type TEXT NOT NULL,
                 Parent TEXT,
+                VirtualPath TEXT,
                 LastModified TEXT NOT NULL,
                 Json TEXT
             );
@@ -108,7 +110,10 @@ public class SqliteDatabaseService : IDatabaseService
             CREATE INDEX IF NOT EXISTS idx_pages_status ON Pages(Status);
             CREATE INDEX IF NOT EXISTS idx_pages_lastsync ON Pages(LastSyncTime);
             CREATE INDEX IF NOT EXISTS idx_synchistory_timestamp ON SyncHistory(Timestamp);";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        
+        using var connection = new SqliteConnection(ConnectionString);
+        connection.Open();
+        connection.Execute("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
         connection.Execute(createTablesSql);
     }
 
@@ -126,6 +131,7 @@ public class SqliteDatabaseService : IDatabaseService
                 VisibleName TEXT NOT NULL,
                 Type TEXT NOT NULL,
                 Parent TEXT,
+                VirtualPath TEXT,
                 LastModified TEXT NOT NULL,
                 Json TEXT
             );
@@ -170,14 +176,16 @@ public class SqliteDatabaseService : IDatabaseService
             CREATE INDEX IF NOT EXISTS idx_pages_status ON Pages(Status);
             CREATE INDEX IF NOT EXISTS idx_pages_lastsync ON Pages(LastSyncTime);
             CREATE INDEX IF NOT EXISTS idx_synchistory_timestamp ON SyncHistory(Timestamp);";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await connection.ExecuteAsync("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
         await connection.ExecuteAsync(createTablesSql);
     }
 
     public async Task<SyncConfiguration?> GetConfigurationAsync()
     {
         var sql = "SELECT Json FROM Configuration ORDER BY UpdatedAt DESC LIMIT 1";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         var json = await connection.QueryFirstOrDefaultAsync<string>(sql);
 
         if (string.IsNullOrEmpty(json))
@@ -194,7 +202,7 @@ public class SqliteDatabaseService : IDatabaseService
         var sql = @"
             INSERT OR REPLACE INTO Configuration (Id, Json, UpdatedAt)
             VALUES (@Id, @Json, @UpdatedAt)";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         await connection.ExecuteAsync(sql, new
         {
             config.Id,
@@ -208,7 +216,7 @@ public class SqliteDatabaseService : IDatabaseService
         var sql = @"
             SELECT * FROM Pages 
             WHERE DocumentId = @DocumentId AND PageId = @PageId";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         var result = await connection.QueryFirstOrDefaultAsync<dynamic>(sql, new { DocumentId = documentId, PageId = pageId });
 
         if (result == null)
@@ -224,7 +232,7 @@ public class SqliteDatabaseService : IDatabaseService
             WHERE Status = @Status 
             ORDER BY LastModified DESC 
             LIMIT @Limit";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         var results = await connection.QueryAsync<dynamic>(sql, new
         {
             Status = (int)SyncStatus.Pending,
@@ -240,7 +248,7 @@ public class SqliteDatabaseService : IDatabaseService
             SELECT * FROM Pages 
             ORDER BY LastModified DESC 
             LIMIT @Limit";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         var results = await connection.QueryAsync<dynamic>(sql, new { Limit = limit });
         return [.. results.Select(MapToPageMetadata)];
     }
@@ -248,7 +256,7 @@ public class SqliteDatabaseService : IDatabaseService
     public async Task<List<PageMetadata>> GetPagesByStatusAsync(SyncStatus status)
     {
         var sql = "SELECT * FROM Pages WHERE Status = @Status";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         var results = await connection.QueryAsync<dynamic>(sql, new { Status = (int)status });
         return [.. results.Select(MapToPageMetadata)];
     }
@@ -267,7 +275,7 @@ public class SqliteDatabaseService : IDatabaseService
                 @ContentHash, @Status, @LastSyncTime, @OneNotePageId, @OneNotePageUrl,
                 @RetryCount, @LastError, @Json
             )";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         await connection.ExecuteAsync(sql, new
         {
             metadata.DocumentId,
@@ -303,7 +311,7 @@ public class SqliteDatabaseService : IDatabaseService
 
         sql += @"
             WHERE DocumentId = @DocumentId AND PageId = @PageId";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         await connection.ExecuteAsync(sql, new
         {
             Status = (int)status,
@@ -318,7 +326,7 @@ public class SqliteDatabaseService : IDatabaseService
     public async Task<DocumentMetadata?> GetDocumentMetadataAsync(string documentId)
     {
         var sql = "SELECT * FROM Documents WHERE DocumentId = @DocumentId";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         var result = await connection.QueryFirstOrDefaultAsync<dynamic>(sql, new { DocumentId = documentId });
 
         if (result == null)
@@ -350,7 +358,7 @@ public class SqliteDatabaseService : IDatabaseService
     private async Task<List<PageMetadata>> GetDocumentPagesAsync(string documentId)
     {
         var sql = "SELECT * FROM Pages WHERE DocumentId = @DocumentId";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         var results = await connection.QueryAsync<dynamic>(sql, new { DocumentId = documentId });
         return [.. results.Select(MapToPageMetadata)];
     }
@@ -358,7 +366,7 @@ public class SqliteDatabaseService : IDatabaseService
     public async Task<List<DocumentMetadata>> GetAllDocumentsAsync()
     {
         var sql = "SELECT * FROM Documents ORDER BY VisibleName";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         var results = await connection.QueryAsync<dynamic>(sql);
 
         var documents = new List<DocumentMetadata>();
@@ -379,6 +387,9 @@ public class SqliteDatabaseService : IDatabaseService
             doc.VisibleName = result.VisibleName;
             doc.Type = result.Type;
             doc.Parent = result.Parent ?? "";
+
+            // Handle backwards compatibility for VirtualPath
+            try { doc.VirtualPath = result.VirtualPath ?? ""; } catch { doc.VirtualPath = ""; }
             doc.LastModified = DateTime.Parse(result.LastModified);
 
             doc.Pages.AddRange(await GetDocumentPagesAsync(doc.DocumentId));
@@ -391,15 +402,16 @@ public class SqliteDatabaseService : IDatabaseService
     public async Task SaveDocumentMetadataAsync(DocumentMetadata metadata)
     {
         var sql = @"
-            INSERT OR REPLACE INTO Documents (DocumentId, VisibleName, Type, Parent, LastModified, Json)
-            VALUES (@DocumentId, @VisibleName, @Type, @Parent, @LastModified, @Json)";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+            INSERT OR REPLACE INTO Documents (DocumentId, VisibleName, Type, Parent, VirtualPath, LastModified, Json)
+            VALUES (@DocumentId, @VisibleName, @Type, @Parent, @VirtualPath, @LastModified, @Json)";
+        using var connection = new SqliteConnection(ConnectionString);
         await connection.ExecuteAsync(sql, new
         {
             metadata.DocumentId,
             metadata.VisibleName,
             metadata.Type,
             metadata.Parent,
+            metadata.VirtualPath,
             LastModified = metadata.LastModified.ToString("O"),
             Json = System.Text.Json.JsonSerializer.Serialize(metadata)
         });
@@ -408,6 +420,52 @@ public class SqliteDatabaseService : IDatabaseService
         foreach (var page in metadata.Pages)
         {
             await SavePageMetadataAsync(page);
+        }
+    }
+
+    public async Task UpsertFileTreeAsync(IEnumerable<DocumentMetadata> documents)
+    {
+        using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        using var transaction = connection.BeginTransaction();
+
+        try
+        {
+            var sql = @"
+                INSERT INTO Documents (DocumentId, VisibleName, Type, Parent, VirtualPath, LastModified, Json)
+                VALUES (@DocumentId, @VisibleName, @Type, @Parent, @VirtualPath, @LastModified, @Json)
+                ON CONFLICT(DocumentId) DO UPDATE SET
+                    VisibleName = excluded.VisibleName,
+                    Type = excluded.Type,
+                    Parent = excluded.Parent,
+                    VirtualPath = CASE WHEN excluded.VirtualPath != '' THEN excluded.VirtualPath ELSE Documents.VirtualPath END,
+                    LastModified = MAX(Documents.LastModified, excluded.LastModified);";
+
+            // Note: We deliberately EXCLUDE `Json` (which holds CustomMetadata aka Sync status) from updates 
+            // so we don't wipe out OneNoteUrl, NotebookName configurations, and sync settings on reload.
+
+            foreach (var doc in documents)
+            {
+                var param = new
+                {
+                    doc.DocumentId,
+                    doc.VisibleName,
+                    doc.Type,
+                    doc.Parent,
+                    doc.VirtualPath,
+                    LastModified = doc.LastModified.ToString("O"),
+                    Json = "{}" // Only used for new inserts, ignored on update
+                };
+                await connection.ExecuteAsync(sql, param, transaction);
+            }
+
+            await transaction.CommitAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to completely upsert filetree");
+            await transaction.RollbackAsync();
+            throw;
         }
     }
 
@@ -434,7 +492,7 @@ public class SqliteDatabaseService : IDatabaseService
         var sql = @"
             DELETE FROM Pages 
             WHERE Status = @Status AND LastSyncTime < @CutoffDate";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         var deleted = await connection.ExecuteAsync(sql, new
         {
             Status = (int)SyncStatus.Uploaded,
@@ -450,7 +508,7 @@ public class SqliteDatabaseService : IDatabaseService
 
     public async Task ClearCacheAsync()
     {
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         await connection.ExecuteAsync("DELETE FROM Pages");
         await connection.ExecuteAsync("DELETE FROM Documents");
         await connection.ExecuteAsync("DELETE FROM SyncHistory");
@@ -472,7 +530,7 @@ public class SqliteDatabaseService : IDatabaseService
         var sql = @"
             INSERT INTO SyncHistory (Timestamp, DocumentId, PageId, Success, Details)
             VALUES (@Timestamp, @DocumentId, @PageId, @Success, @Details)";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         await connection.ExecuteAsync(sql, new
         {
             Timestamp = DateTime.UtcNow.ToString("O"),
@@ -489,7 +547,7 @@ public class SqliteDatabaseService : IDatabaseService
             SELECT * FROM SyncHistory 
             ORDER BY Timestamp DESC 
             LIMIT @Limit";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         var results = await connection.QueryAsync<SyncEvent>(sql, new { Limit = limit });
         return [.. results];
     }
@@ -520,7 +578,7 @@ public class SqliteDatabaseService : IDatabaseService
     public async Task<string?> GetTelemetryAsync(string key)
     {
         var sql = "SELECT Value FROM Telemetry WHERE Key = @Key";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         return await connection.QueryFirstOrDefaultAsync<string>(sql, new { Key = key });
     }
 
@@ -529,7 +587,7 @@ public class SqliteDatabaseService : IDatabaseService
         var sql = @"
             INSERT OR REPLACE INTO Telemetry (Key, Value, UpdatedAt)
             VALUES (@Key, @Value, @UpdatedAt)";
-        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        using var connection = new SqliteConnection(ConnectionString);
         await connection.ExecuteAsync(sql, new
         {
             Key = key,

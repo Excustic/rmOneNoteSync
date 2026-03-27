@@ -62,7 +62,8 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
                             
-                            <DataGridTextColumn Header="Page" Binding="{Binding DisplayName}" Width="150" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Section" Binding="{Binding SectionName}" Width="150" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Page" Binding="{Binding DisplayName}" Width="100" IsReadOnly="True" />
                             
                             <DataGridTemplateColumn Header="Status" Width="100">
                                 <DataGridTemplateColumn.CellTemplate>

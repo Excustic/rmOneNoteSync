@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../../../tmp"
+		}
+	],
+	"settings": {
+		"axaml.trace.server": "verbose"
+	}
+}

@@ -53,6 +53,7 @@ public class DocumentMetadata
     public string VisibleName { get; set; } = "";
     public string Type { get; set; } = "DocumentType";
     public string Parent { get; set; } = "";
+    public string VirtualPath { get; set; } = "";
     public DateTime LastModified { get; set; }
     public List<PageMetadata> Pages { get; set; } = new();
     public Dictionary<string, object> CustomMetadata { get; set; } = new();

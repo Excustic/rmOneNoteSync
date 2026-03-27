@@ -4,7 +4,9 @@ public static class AppSettings
 {
     // SET THIS TO TRUE FOR TESTING WITHOUT DEVICE/ONENOTE
     public static bool TestingMode { get; set; } = false;
-    
+
+    public const string DefaultDeviceIp = "10.11.99.1";
+    public const int DefaultServerPort = 34983;
     // Test mode settings
     public static class TestMode
     {

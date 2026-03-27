@@ -41,13 +41,19 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "netsh"; Parameters: "http add urlacl url=http://+:8080/ user=EVERYONE"; Flags: runhidden
-Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""{#MyAppName}"" dir=in action=allow protocol=TCP localport=8080 profile=private,domain"; Flags: runhidden
+; Add firewall rule on install (profile=any is required because the reMarkable USB connection defaults to a "Public" network)
+Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""rmOneNoteSync"" dir=in action=allow protocol=TCP localport=34983 profile=any"; Flags: runhidden
 
 [UninstallRun]
-; Clean up our mess when the user uninstalls the app!
-Filename: "netsh"; Parameters: "http delete urlacl url=http://*:8080/"; Flags: runhidden
-Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""{#MyAppName}"""; Flags: runhidden
+; Remove the firewall rule when the user uninstalls the app
+Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""rmOneNoteSync"" protocol=TCP localport=34983"; Flags: runhidden
+
+[UninstallDelete]
+; 1. Delete any leftover files (like runtime logs) the app created in the installation folder
+Type: filesandordirs; Name: "{app}\*"
+
+; 2. Delete the application folder itself
+Type: dirifempty; Name: "{app}"
 
 [Code]
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

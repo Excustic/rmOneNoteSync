@@ -122,6 +122,20 @@ public class SyncService : ISyncService
                     // Ensure notebook exists
                     ReportProgress($"Fetching Notebook...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 2, 8);
 
+                    var docEntry = await _databaseService.GetDocumentMetadataAsync(page.DocumentId);
+                    // Assign notebook name based on DB data (user may have altered it)
+                    if (docEntry is not { Parent: "" })
+                    {
+                        var parentEntry = await _databaseService.GetDocumentMetadataAsync(docEntry.Parent);
+                        if (parentEntry is not { VisibleName: "" })
+                        {
+                            notebook = "rm_" + parentEntry?.VisibleName;
+                        }
+                    }
+                    else if (docEntry is not { VisibleName: "" })
+                    {
+                        notebook = "rm_" + docEntry?.VisibleName;
+                    }
                     var notebooks = await _oneNoteClient.GetNotebooksAsync();
                     var targetNotebook = notebooks.FirstOrDefault(n => n.DisplayName == notebook);
                     if (targetNotebook == null)

@@ -22,6 +22,7 @@ public partial class ManualSyncViewModel : ViewModelBase
     private readonly DocumentMetadata _document;
     private readonly IDeviceDetectionService _deviceDetectionService;
     private readonly IDatabaseService _databaseService;
+    private readonly IConfigurationProviderService _configProvider;
     private readonly ILogger? _logger;
 
     [ObservableProperty]
@@ -41,12 +42,13 @@ public partial class ManualSyncViewModel : ViewModelBase
 
     private bool _isUpdatingSelection = false;
 
-    public ManualSyncViewModel(Window dialog, DocumentMetadata document, IDeviceDetectionService deviceDetectionService, IDatabaseService databaseService, ILogger? logger)
+    public ManualSyncViewModel(Window dialog, DocumentMetadata document, IDeviceDetectionService deviceDetectionService, IDatabaseService databaseService, IConfigurationProviderService configProvider, ILogger? logger)
     {
         _dialog = dialog;
         _document = document;
         _deviceDetectionService = deviceDetectionService;
         _databaseService = databaseService;
+        _configProvider = configProvider;
         _logger = logger;
 
         NotebookName = document.NotebookName;
@@ -57,47 +59,58 @@ public partial class ManualSyncViewModel : ViewModelBase
     {
         try
         {
-            var deviceIp = _deviceDetectionService.CurrentDevice?.IpAddress ?? "10.11.99.1";
+            var deviceIp = _deviceDetectionService.CurrentDevice?.IpAddress ?? AppSettings.DefaultDeviceIp;
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            
+
             var response = await client.GetStringAsync($"http://{deviceIp}:8000/metadata?id={_document.DocumentId}");
             var doc = JsonDocument.Parse(response);
             var root = doc.RootElement;
-            
+
             var pages = new List<ManualSyncPageItem>();
-            if (root.TryGetProperty("pages", out var pagesArr))
+            if (root.TryGetProperty("documents", out var docsArr))
             {
                 var uploadedPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Uploaded);
-                var uploadedDict = uploadedPages.Where(p => p.DocumentId == _document.DocumentId)
-                                                .ToDictionary(p => p.PageId, p => p.LastSyncTime);
+                var uploadedDict = uploadedPages.ToDictionary(p => $"{p.DocumentId}_{p.PageId}", p => p.LastSyncTime);
 
-                int pageNum = 1;
-                foreach (var page in pagesArr.EnumerateArray())
+                foreach (var docNode in docsArr.EnumerateArray())
                 {
-                    var pageId = page.GetString();
-                    if (string.IsNullOrEmpty(pageId)) continue;
-                    
-                    var isUploaded = uploadedDict.TryGetValue(pageId, out var lastUploaded);
-                    
-                    var item = new ManualSyncPageItem
+                    if (!docNode.TryGetProperty("id", out var idProp) || !docNode.TryGetProperty("name", out var nameProp)) continue;
+                    var docId = idProp.GetString() ?? "";
+                    var secName = nameProp.GetString() ?? "Unknown";
+
+                    if (docNode.TryGetProperty("pages", out var pagesArr))
                     {
-                        PageId = pageId,
-                        DisplayName = $"Page {pageNum++}",
-                        IsOnline = isUploaded,
-                        LastUploadedStr = isUploaded && lastUploaded.HasValue ? lastUploaded.Value.ToString("dd MMM yyyy, HH:mm") : "Offline",
-                        IsSelected = !isUploaded // Pre-select only offline pages by default
-                    };
-                    
-                    item.PropertyChanged += (s, e) =>
-                    {
-                        if (e.PropertyName == nameof(ManualSyncPageItem.IsSelected))
-                            UpdateSelectedCount();
-                    };
-                    
-                    pages.Add(item);
+                        int pageNum = 1;
+                        foreach (var page in pagesArr.EnumerateArray())
+                        {
+                            var pageId = page.GetString();
+                            if (string.IsNullOrEmpty(pageId)) continue;
+
+                            var isUploaded = uploadedDict.TryGetValue($"{docId}_{pageId}", out var lastUploaded);
+
+                            var item = new ManualSyncPageItem
+                            {
+                                PageId = pageId,
+                                DocumentId = docId,
+                                SectionName = secName,
+                                DisplayName = $"Page {pageNum++}",
+                                IsOnline = isUploaded,
+                                LastUploadedStr = isUploaded && lastUploaded.HasValue ? lastUploaded.Value.ToString("dd MMM yyyy, HH:mm") : "Offline",
+                                IsSelected = !isUploaded // Pre-select only offline pages by default
+                            };
+
+                            item.PropertyChanged += (s, e) =>
+                            {
+                                if (e.PropertyName == nameof(ManualSyncPageItem.IsSelected))
+                                    UpdateSelectedCount();
+                            };
+
+                            pages.Add(item);
+                        }
+                    }
                 }
             }
-            
+
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
                 Pages = new ObservableCollection<ManualSyncPageItem>(pages);
@@ -112,7 +125,7 @@ public partial class ManualSyncViewModel : ViewModelBase
             {
                 LoadingMessage = "Failed to communicate with device. Please ensure it is connected and awake.";
                 // We leave IsLoading = true to show the error message, but you might want an Error state.
-                IsLoading = false; 
+                IsLoading = false;
             });
         }
     }
@@ -146,26 +159,46 @@ public partial class ManualSyncViewModel : ViewModelBase
     {
         try
         {
-            var selectedPages = Pages.Where(p => p.IsSelected).Select(p => p.PageId).ToList();
+            var selectedPages = Pages.Where(p => p.IsSelected).ToList();
             if (selectedPages.Count == 0) return;
 
             IsLoading = true;
             LoadingMessage = "Sending sync request to device...";
 
-            var payload = new
+            //Add to SyncFiles in config
+            var config = await _databaseService.GetConfigurationAsync();
+            if (config != null)
             {
-                document_id = _document.DocumentId,
-                pages = selectedPages
-            };
+                // Add only unsynced selected pages to SyncFiles
+                config.SyncFiles.AddRange(selectedPages.Where(p => !config.SyncFiles.Contains(p.DocumentId)).Select(p => p.DocumentId));
+                _logger?.LogDebug("Added {Count} new files to SyncFiles", selectedPages.Count);
+                await _databaseService.SaveConfigurationAsync(config);
+                var success = await _configProvider.UpdateDeviceConfigurationAsync();
+                if (!success)
+                {
+                    LoadingMessage = "Failed to update device configuration. Please ensure the device is connected and try again.";
+                    return;
+                }
+            }
 
-            var deviceIp = _deviceDetectionService.CurrentDevice?.IpAddress ?? "10.11.99.1";
+            var deviceIp = _deviceDetectionService.CurrentDevice?.IpAddress ?? AppSettings.DefaultDeviceIp;
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            
-            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-            var response = await client.PostAsync($"http://{deviceIp}:8000/sync", content);
-            
-            response.EnsureSuccessStatusCode();
-            
+
+            var groups = selectedPages.GroupBy(p => p.DocumentId);
+            foreach (var group in groups)
+            {
+                var payload = new
+                {
+                    document_id = group.Key,
+                    pages = group.Select(p => p.PageId).ToList()
+                };
+
+                var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                var response = await client.PostAsync($"http://{deviceIp}:8000/sync", content);
+
+                response.EnsureSuccessStatusCode();
+            }
+
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
                 _dialog.Close(true);
@@ -191,14 +224,16 @@ public partial class ManualSyncViewModel : ViewModelBase
 public partial class ManualSyncPageItem : ObservableObject
 {
     public string PageId { get; set; } = "";
+    public string DocumentId { get; set; } = "";
+    public string SectionName { get; set; } = "";
     public string DisplayName { get; set; } = "";
     public bool IsOnline { get; set; }
-    
+
     public string StatusText => IsOnline ? "Online" : "Offline";
     public string StatusColor => IsOnline ? "#10b981" : "#64748b";
-    
+
     public string LastUploadedStr { get; set; } = "";
-    
+
     [ObservableProperty]
     private bool _isSelected;
 }
