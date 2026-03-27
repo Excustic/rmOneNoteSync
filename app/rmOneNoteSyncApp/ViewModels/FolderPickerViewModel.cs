@@ -22,10 +22,10 @@ public partial class FolderPickerViewModel : ViewModelBase
     private readonly ILogger<FolderPickerViewModel>? _logger;
     private readonly IDeviceDetectionService _deviceDetectionService;
     private SyncConfiguration? _syncConfiguration;
-    private readonly IConfigurationProviderService _configProvider;
+    private readonly IConfigurationProviderService? _configProvider;
 
     [ObservableProperty]
-    private ObservableCollection<FileNode> _folders = new();
+    private ObservableCollection<FileNode> _folders = [];
 
     [ObservableProperty]
     private FileNode? _selectedFolder;
@@ -243,7 +243,7 @@ public partial class FolderPickerViewModel : ViewModelBase
         }
     }
 
-    private void ComputeVirtualPaths(IEnumerable<FileNode> nodes, string currentPath)
+    private static void ComputeVirtualPaths(IEnumerable<FileNode> nodes, string currentPath)
     {
         foreach (var node in nodes)
         {
@@ -257,38 +257,7 @@ public partial class FolderPickerViewModel : ViewModelBase
         }
     }
 
-    private FileNode? ParseMetadataToNode(string docId, string metadata)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(metadata);
-            var root = doc.RootElement;
-
-            var node = new FileNode
-            {
-                Id = docId,
-                Name = root.TryGetProperty("visibleName", out var name) ? name.GetString() ?? "Untitled" : "Untitled",
-                Path = docId,
-                IsFolder = root.TryGetProperty("type", out var type) && type.GetString() == "CollectionType",
-                ParentId = root.TryGetProperty("parent", out var parent) ? parent.GetString() : null
-            };
-
-            // Clean up parent ID (empty string or "trash" means root level)
-            if (string.IsNullOrWhiteSpace(node.ParentId) || node.ParentId == "trash")
-            {
-                node.ParentId = null;
-            }
-
-            return node;
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Failed to parse metadata for document {DocId}", docId);
-            return null;
-        }
-    }
-
-    private List<FileNode> BuildHierarchy(List<FileNode> allNodes, Dictionary<string, FileNode> nodeMap)
+    private static List<FileNode> BuildHierarchy(List<FileNode> allNodes, Dictionary<string, FileNode> nodeMap)
     {
         var rootNodes = new List<FileNode>();
 
@@ -380,7 +349,7 @@ public partial class FolderPickerViewModel : ViewModelBase
     /// <param name="source">The source to explore.</param>
     /// <param name="nodeId">The target node's ID.</param>
     /// <returns>A nullable <see cref="FileNode"/> object.</returns>
-    private FileNode? FindFolderNode(FileNode source, string nodeId)
+    private static FileNode? FindFolderNode(FileNode source, string nodeId)
     {
         if (nodeId == string.Empty) return null;
         if (source.Id == nodeId) return source;
@@ -422,7 +391,7 @@ public partial class FolderPickerViewModel : ViewModelBase
         }
     }
 
-    private void CountSelected(FileNode node, ref int docs, ref int folders)
+    private static void CountSelected(FileNode node, ref int docs, ref int folders)
     {
         if (node.SelectionState == true)
         {
@@ -465,7 +434,7 @@ public partial class FolderPickerViewModel : ViewModelBase
             // Save to database
             var config = await _databaseService.GetConfigurationAsync() ?? new SyncConfiguration();
             // Distinct just in case
-            config.SyncFiles = selectedDocIds.Distinct().ToList();
+            config.SyncFiles = [.. selectedDocIds.Distinct()];
             await _databaseService.SaveConfigurationAsync(config);
 
             // Create stub DocumentMetadata so new Notebooks appear on the Dashboard instantly
