@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Identity.Client;
 using rmOneNoteSyncApp.Services.Interfaces;
 using AuthenticationResult = rmOneNoteSyncApp.Services.Interfaces.AuthenticationResult;
@@ -16,8 +17,8 @@ public class OneNoteAuthService : IOneNoteAuthService
     private Microsoft.Identity.Client.AuthenticationResult? _authResult;
 
     // Azure AD App Registration details
-    private const string ClientId = "d88e88e8-1547-4325-a5ae-67e40440cd65";
-    private const string TenantId = "consumers"; // Use "common" for multi-tenant
+    private const string ClientIdKey = "AzureAd:ClientId";
+    private const string TenantIdKey = "AzureAd:TenantId";
     private readonly string[] _scopes =
     [
         "Notes.ReadWrite",
@@ -37,10 +38,21 @@ public class OneNoteAuthService : IOneNoteAuthService
     {
         _logger = logger;
 
-        // Configure MSAL
-        var authority = $"https://login.microsoftonline.com/{TenantId}";
+        // Build the configuration
+        var config = new ConfigurationBuilder()
+            // Load standard settings first
+            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+            // Overwrite with local secrets (This only runs in development)
+            .AddUserSecrets<App>()
+            .Build();
 
-        _msalClient = PublicClientApplicationBuilder.Create(ClientId)
+        string? clientId = config[ClientIdKey];
+        string? tenantId = config[TenantIdKey];
+
+        // Configure MSAL
+        var authority = $"https://login.microsoftonline.com/{tenantId}";
+
+        _msalClient = PublicClientApplicationBuilder.Create(clientId)
             .WithAuthority(authority)
             .WithRedirectUri("http://localhost") // For desktop apps
             .WithDefaultRedirectUri()
