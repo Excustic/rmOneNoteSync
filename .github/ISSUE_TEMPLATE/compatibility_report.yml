@@ -32,7 +32,7 @@ body:
       placeholder: e.g., v3.15.2.0
     validations:
       required: true
-- type: input
+  - type: input
     id: app-version
     attributes:
       label: App Version
