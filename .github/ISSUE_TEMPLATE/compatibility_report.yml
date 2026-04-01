@@ -32,3 +32,11 @@ body:
       placeholder: e.g., v3.15.2.0
     validations:
       required: true
+- type: input
+    id: app-version
+    attributes:
+      label: App Version
+      description: "Which version of the app are you running? (e.g., v1.0.0-alpha.2). You can find tags [here](https://github.com/Excustic/rmOneNoteSync/tags)."
+      placeholder: "v1.0.0-alpha.2"
+    validations:
+      required: true
