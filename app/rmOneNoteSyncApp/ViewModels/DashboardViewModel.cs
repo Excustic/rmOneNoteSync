@@ -420,8 +420,11 @@ public partial class DashboardViewModel : ViewModelBase
             RequiresManualScan = false;
         });
 
-        _detectionService.ResetWifiScanAttempts();
-        await _detectionService.CheckConnectionAsync();
+        bool found = await _detectionService.RunManualNetworkScanAsync();
+        if (!found) 
+        {
+            await _detectionService.CheckConnectionAsync();
+        }
     }
 
     [RelayCommand]

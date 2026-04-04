@@ -21,6 +21,7 @@ public class SyncService : ISyncService
     private readonly Timer? _autoSyncTimer;
     private bool _isSyncing;
     private CancellationTokenSource? _autoSyncCancellation;
+    private readonly HashSet<string> _cancelledItems = new();
 
     public event EventHandler<SyncProgressEventArgs>? SyncProgress;
     public event EventHandler<PageSyncCompletedEventArgs>? PageSyncCompleted;
@@ -60,6 +61,7 @@ public class SyncService : ISyncService
         }
 
         _isSyncing = true;
+        _cancelledItems.Clear();
         var result = new SyncResult { StartTime = DateTime.UtcNow };
         var startTime = DateTime.Now;
 
@@ -90,6 +92,13 @@ public class SyncService : ISyncService
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
+                    
+                string itemKey = $"{page.DocumentId}_{page.PageId}";
+                if (_cancelledItems.Contains(itemKey))
+                {
+                    _logger.LogInformation("Skipping cancelled item {Page}", page.Title);
+                    continue;
+                }
 
                 // Enforce whitelist check to intercept unauthorized items.
                 if (!whitelist.Contains(page.DocumentId))
@@ -413,6 +422,15 @@ public class SyncService : ISyncService
         section = SanitizeOneNoteName(section);
 
         return (notebook, section, page);
+    }
+
+    public async Task CancelSyncItemAsync(string documentId, string pageId)
+    {
+        string itemKey = $"{documentId}_{pageId}";
+        _cancelledItems.Add(itemKey);
+        
+        // Also mark as skipped in DB
+        await _databaseService.UpdatePageStatusAsync(documentId, pageId, SyncStatus.Skipped);
     }
 
     public void Dispose()

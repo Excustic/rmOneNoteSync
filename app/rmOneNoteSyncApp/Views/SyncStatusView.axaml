@@ -128,6 +128,13 @@
                               MinHeight="300"
                               MaxHeight="500"
                               IsReadOnly="True">
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Cancel Sync" 
+                                          Command="{ReflectionBinding $parent[UserControl].DataContext.CancelSyncCommand}" 
+                                          CommandParameter="{Binding}" />
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Virtual Path" 
                                                 Binding="{Binding VirtualPath, Mode=OneWay}" 

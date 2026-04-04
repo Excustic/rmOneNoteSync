@@ -254,12 +254,7 @@ namespace rmOneNoteSyncApp.Services
         }
 
         private async Task UploadConfigurationAsync()
-        {
-            string watcherConfig = "WATCH_PATH=/home/root/.local/share/remarkable/xochitl\n" +
-                                   "LOG_PATH=/home/root/onenote-sync/logs/watcher.log\n" +
-                                   "CACHE_PATH=/home/root/onenote-sync/cache/.sync_cache";
-
-            // 1. Grab the clean version (e.g., "0.6.0") just like we did for the UI
+        {            // 1. Grab the clean version (e.g., "0.6.0") just like we did for the UI
             string versionInfo = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
             string cleanVersion = versionInfo.Split('+')[0];
 
@@ -273,10 +268,9 @@ namespace rmOneNoteSyncApp.Services
             """;
 
             // Write configs via SSH
-            _ = await _sshService.ExecuteCommandAsync($"echo '{watcherConfig}' > {REMOTE_BASE_PATH}/watcher.conf");
             _ = await _sshService.ExecuteCommandAsync($"echo '{versionJson}' > {REMOTE_BASE_PATH}/version.json");
 
-            // Generate httpclient.conf via ConfigurationProviderService bypassng service restart
+            // Generate daemon.conf via ConfigurationProviderService bypassng service restart
             _ = await _configProvider.UpdateDeviceConfigurationAsync(restartService: false);
         }
 
@@ -436,8 +430,7 @@ namespace rmOneNoteSyncApp.Services
         {
             try
             {
-                await _sshService.DownloadFileAsync($"{REMOTE_BASE_PATH}/watcher.conf", localPath + ".watcher");
-                await _sshService.DownloadFileAsync($"{REMOTE_BASE_PATH}/httpclient.conf", localPath + ".httpclient");
+                await _sshService.DownloadFileAsync($"{REMOTE_BASE_PATH}/daemon.conf", localPath + ".daemon");
                 return true;
             }
             catch
@@ -450,14 +443,9 @@ namespace rmOneNoteSyncApp.Services
         {
             try
             {
-                if (File.Exists(localPath + ".watcher"))
+                if (File.Exists(localPath + ".daemon"))
                 {
-                    await _sshService.UploadFileAsync(localPath + ".watcher", $"{REMOTE_BASE_PATH}/watcher.conf");
-                }
-
-                if (File.Exists(localPath + ".httpclient"))
-                {
-                    await _sshService.UploadFileAsync(localPath + ".httpclient", $"{REMOTE_BASE_PATH}/httpclient.conf");
+                    await _sshService.UploadFileAsync(localPath + ".daemon", $"{REMOTE_BASE_PATH}/daemon.conf");
                 }
 
                 return true;

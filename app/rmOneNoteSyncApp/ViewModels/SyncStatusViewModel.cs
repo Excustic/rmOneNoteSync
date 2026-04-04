@@ -403,6 +403,27 @@ public partial class SyncStatusViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private async Task CancelSyncAsync(SyncItem? item)
+    {
+        if (item == null) return;
+        
+        await _syncService.CancelSyncItemAsync(item.DocumentId, item.PageId);
+        item.Status = SyncStatus.Skipped;
+        
+        // Remove from list if it's currently pending/inflight
+        var existing = SyncItems.FirstOrDefault(i => i.DocumentId == item.DocumentId && i.PageId == item.PageId);
+        if (existing != null)
+        {
+            SyncItems.Remove(existing);
+        }
+        
+        SortSyncItems();
+        
+        // Refresh counts
+        await LoadSyncStatusAsync();
+    }
+
+    [RelayCommand]
     private void OpenUrl(string? url)
     {
         if (string.IsNullOrEmpty(url)) return;

@@ -22,8 +22,7 @@ RemarkableSyncClient/
 ├── httpclient.c         # Production HTTP client
 ├── cache_debug.c        # Cache debug tool
 ├── Makefile            # Build system
-├── watcher.conf        # Watcher configuration
-├── httpclient.conf     # HTTP client configuration
+├── daemon.conf         # Daemon configuration
 └── test_server.py      # Test server for development
 ```
 
@@ -107,7 +106,7 @@ scp watcher httpclient cache_debug root@10.11.99.1:/home/root/onenote-sync/bin/
 ### 4.2 Copy configuration files
 First, edit the configuration files if needed, then:
 ```bash
-scp watcher.conf httpclient.conf root@10.11.99.1:/home/root/onenote-sync/
+scp daemon.conf root@10.11.99.1:/home/root/onenote-sync/
 ```
 
 ### 4.3 Set permissions
@@ -130,12 +129,12 @@ python3 test_server.py 8080
 SSH into reMarkable and edit the config:
 ```bash
 ssh root@10.11.99.1
-vi /home/root/onenote-sync/httpclient.conf
+vi /home/root/onenote-sync/daemon.conf
 ```
 
-Update `SERVER_URL` to point to your PC's IP address:
+Update `SERVER_URL_0` to point to your PC's IP address:
 ```ini
-SERVER_URL=http://YOUR_PC_IP:8080/upload
+SERVER_URL_0=http://YOUR_PC_IP:8080/upload
 ```
 
 ### 5.3 Test the cache debug tool
@@ -241,19 +240,18 @@ systemctl stop remarkable-sync-httpclient.service
 
 ## Configuration Reference
 
-### watcher.conf
+### daemon.conf
 - `WATCH_PATH`: Directory to monitor (default: xochitl directory)
 - `LOG_PATH`: Log file location
 - `CACHE_PATH`: Shared cache file
-
-### httpclient.conf
-- `SERVER_URL`: Upload server endpoint
+- `SERVER_URL_0`: Upload server endpoint
 - `API_KEY`: Authentication key
-- `SHARED_PATH`: Filter for which paths to sync ("*" for all)
 - `UPLOAD_INTERVAL`: Seconds between upload attempts
 - `MAX_RETRIES`: Maximum retry attempts per file
 - `RETRY_DELAY`: Seconds between retries
 - `TIMEOUT`: HTTP timeout in seconds
+- `WHITELIST_COUNT`: Count of document IDs to sync
+- `WHITELIST_0`: Document ID to sync
 
 ## Expected Behavior
 
@@ -274,7 +272,7 @@ systemctl stop remarkable-sync-httpclient.service
 - Check paths in config files exist
 
 ### Issue: Files not uploading
-- Check `SHARED_PATH` filter in httpclient.conf
+- Check `WHITELIST` entries in daemon.conf
 - Verify server is reachable: `curl http://YOUR_SERVER/`
 - Check cache status: `cache_debug` tool
 - Review httpclient.log for errors
@@ -287,8 +285,8 @@ systemctl stop remarkable-sync-httpclient.service
 ## Next Steps
 
 1. Replace test server with production OneNote sync server
-2. Update `SERVER_URL` and `API_KEY` in httpclient.conf
-3. Configure `SHARED_PATH` to limit which documents sync
+2. Update `SERVER_URL_0` and `API_KEY` in daemon.conf
+3. Configure `WHITELIST` to limit which documents sync
 4. Monitor logs to ensure stable operation
 
 ## Important Notes

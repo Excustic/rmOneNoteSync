@@ -25,9 +25,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
     private Timer? _pollingTimer;
     private DeviceInfo? _currentDevice;
     private bool _isMonitoring;
-    private int _wifiScanAttempts = 0;
-    private const int MAX_WIFI_SCAN_ATTEMPTS = 3;
-    private bool _requiresManualScan;
+    private bool _requiresManualScan = true; // Default to true so UI shows button
     public bool RequiresManualScan => _requiresManualScan;
 
     protected const string REMARKABLE_USB_IP = AppSettings.DefaultDeviceIp;
@@ -38,11 +36,27 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
     public bool IncludeSSHConnectionCheck { get; set; } = true;
     public DeviceInfo? CurrentDevice => _currentDevice;
 
-    public void ResetWifiScanAttempts()
+    public async Task<bool> RunManualNetworkScanAsync()
     {
-        _wifiScanAttempts = 0;
-        _requiresManualScan = false;
-        _logger.LogDebug("WiFi scan attempts reset manually.");
+        var config = await _databaseService.GetConfigurationAsync();
+        if (config == null || string.IsNullOrWhiteSpace(config.DeviceMacAddress))
+            return false;
+
+        _logger.LogDebug("Running manual ARP network scan for MAC {Mac}...", config.DeviceMacAddress);
+        IPAddress? wifiIp = await ArpScanner.FindIpByMacAddressAsync(config.DeviceMacAddress, _logger);
+
+        if (wifiIp != null && await PingDeviceAsync(wifiIp.ToString()))
+        {
+            string ipString = wifiIp.ToString();
+            config.LastNetworkIp = ipString;
+            await _databaseService.SaveConfigurationAsync(config);
+            _requiresManualScan = false;
+            await CheckConnectionAsync();
+            return true;
+        }
+
+        _logger.LogWarning("Manual scan failed to find the device.");
+        return false;
     }
 
     public virtual async Task StartMonitoringAsync()
@@ -50,26 +64,34 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
         if (_isMonitoring) return;
 
         _isMonitoring = true;
+        NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
 
-        // Start polling timer - check every 2 seconds
-        var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
-        while (await timer.WaitForNextTickAsync())
+        // Start polling timer - check every 5 seconds (less aggressive now since we have NetworkAddressChanged)
+        var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        while (await timer.WaitForNextTickAsync() && _isMonitoring)
         {
-            // _logger.LogDebug("Checking device connection...");
             await CheckConnectionAsync();
         }
 
         _logger.LogDebug("Started device monitoring");
     }
 
-    public virtual async Task StopMonitoringAsync()
+    private void OnNetworkAddressChanged(object? sender, EventArgs e)
+    {
+        _logger.LogDebug("Network address changed, triggering immediate connection check.");
+        _ = CheckConnectionAsync();
+    }
+
+    public virtual Task StopMonitoringAsync()
     {
         _isMonitoring = false;
+        NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
 
         _pollingTimer?.Dispose();
         _pollingTimer = null;
 
         _logger.LogDebug("Stopped device monitoring");
+        return Task.CompletedTask;
     }
 
     public async Task<bool> CheckConnectionAsync()
@@ -112,19 +134,14 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
                         SyncVersion = deviceInfo.TryGetValue("SyncVersion", out var syncVersion) ? syncVersion : "Unknown"
                     };
 
-
-                    // Perform ArpScan to gather WiFi fallback IP.
-                    if (config?.LastNetworkIp == null)
-                        _ = ArpScan(config);
+                    // USB does not automatically trigger ARP. Manual scan available instead.
                 }
-                _wifiScanAttempts = 0;
                 _requiresManualScan = false;
             }
 
             // 2. Check last known WiFi IP or current connection persistence
             else if (IncludeSSHConnectionCheck && !string.IsNullOrEmpty(targetIp) && await PingDeviceAsync(targetIp))
             {
-                _wifiScanAttempts = 0;
                 _requiresManualScan = false;
                 if (_currentDevice == null || _currentDevice.ConnectionType != DeviceConnectionType.WiFi || _currentDevice.IpAddress != targetIp)
                 {
@@ -159,31 +176,12 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
                     Device = _currentDevice
                 });
             }
-            // 3. ARP Scan - try to find IP of the device in the local network as last resort.
-            if (IncludeSSHConnectionCheck && !_isConnected)
+            // 3. (REMOVED: Automatic ARP Scan) - Now handled explicitly by RunManualNetworkScanAsync
+            if (!_isConnected && !string.IsNullOrEmpty(config?.DeviceMacAddress))
             {
-                if (await ArpScan(config))
-                {
-                    if (_currentDevice == null || _currentDevice.ConnectionType != DeviceConnectionType.WiFi || _currentDevice.IpAddress != config.LastNetworkIp || _currentDevice.MacAddress != config.DeviceMacAddress)
-                    {
-                        if (!await _sshService.ConnectAsync(config.LastNetworkIp, config?.DevicePassword))
-                            return false;
-                        var deviceInfo = await _sshService.GetDeviceInfoAsync();
-                        _currentDevice = new DeviceInfo
-                        {
-                            IpAddress = config.LastNetworkIp,
-                            InterfaceName = "WLAN",
-                            MacAddress = IncludeSSHConnectionCheck ? await _sshService.GetMacAddressAsync() ?? "Unknown" : "Unknown",
-                            DetectedAt = DateTime.UtcNow,
-                            ConnectionType = DeviceConnectionType.WiFi,
-                            Model = deviceInfo.TryGetValue("Model", out var model) ? model : "Unknown",
-                            DeviceVersion = deviceInfo.TryGetValue("Version", out var version) ? version : "Unknown",
-                            DeviceSerial = deviceInfo.TryGetValue("Serial", out var serial) ? serial : "Unknown",
-                            SyncVersion = deviceInfo.TryGetValue("SyncVersion", out var syncVersion) ? syncVersion : "Unknown"
-                        };
-                    }
-                }
+                _requiresManualScan = true; // Offer user the button to scan
             }
+
             return _isConnected;
         }
         catch (Exception ex)
@@ -191,48 +189,6 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
             _logger.LogError(ex, "Error checking device connection");
             return false;
         }
-    }
-    protected async Task<bool> ArpScan(SyncConfiguration config)
-    {
-        // 3. ARP Scan (Priority 3 - Only after grace period fails OR no current device)
-        if (config is { EnableWifiSync: true } && !string.IsNullOrEmpty(config.DeviceMacAddress) && !_requiresManualScan)
-        {
-            if (_wifiScanAttempts < MAX_WIFI_SCAN_ATTEMPTS)
-            {
-                _wifiScanAttempts++;
-                _logger.LogDebug("Attempting WiFi scan ({Attempt}/{Max})", _wifiScanAttempts, MAX_WIFI_SCAN_ATTEMPTS);
-
-                // Now returns an IPAddress object directly
-                IPAddress? wifiIp = await ArpScanner.FindIpByMacAddressAsync(config.DeviceMacAddress, _logger);
-
-                if (wifiIp != null && await PingDeviceAsync(wifiIp.ToString()))
-                {
-                    _wifiScanAttempts = 0;
-
-                    string ipString = wifiIp.ToString();
-
-                    // Save this IP to the database for future starts
-                    if (config.LastNetworkIp != ipString)
-                    {
-                        config.LastNetworkIp = ipString;
-                        await _databaseService.SaveConfigurationAsync(config);
-                    }
-                    return true;
-                }
-
-                if (_wifiScanAttempts >= MAX_WIFI_SCAN_ATTEMPTS)
-                {
-                    _requiresManualScan = true;
-                    _logger.LogWarning("WiFi scan failed after {Max} attempts. User intervention required.", MAX_WIFI_SCAN_ATTEMPTS);
-                    DeviceConnectionChanged?.Invoke(this, new DeviceConnectionEventArgs
-                    {
-                        IsConnected = false,
-                        Device = _currentDevice
-                    });
-                }
-            }
-        }
-        return false;
     }
     protected abstract Task<NetworkInterface?> FindRemarkableInterfaceAsync();
 
@@ -280,7 +236,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
     {
         try
         {
-            // Simple approach: get all local IPs and find one with the same prefix (first 3 octets)
+            // Simple approach: get all local IPs and find one with the same prefix (first https://store.steampowered.com/app/2943650/FragPunk/3 octets)
             // This is a common heuristic for home networks.
             var prefix = string.Join(".", deviceIp.Split('.').Take(3)) + ".";
 

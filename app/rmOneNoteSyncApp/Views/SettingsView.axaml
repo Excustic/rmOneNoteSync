@@ -50,7 +50,7 @@
 
                     <!-- Upload Settings Section -->
                     <TextBlock Text="Upload Settings" FontSize="16" FontWeight="SemiBold" Margin="0,15,0,5"/>
-                    <TextBlock Text="These values are written to the device configuration file (httpclient.conf) each time settings are saved."
+                    <TextBlock Text="These values are written to the device configuration file (daemon.conf) each time settings are saved."
                                Foreground="#6b7280" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,5"/>
 
                     <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="15">
@@ -135,6 +135,7 @@
                     
                     <CheckBox Content="Enable automatic sync" IsChecked="{Binding AutoSync}"/>
                     <CheckBox Content="Enable WiFi sync" IsChecked="{Binding EnableWifiSync}"/>
+                    <CheckBox Content="Auto-add new pages inside whitelisted notebooks" IsChecked="{Binding AutoAddNewFiles}"/>
                     
                     <StackPanel Spacing="5">
                         <TextBlock Text="Sync interval (seconds):" Foreground="#6b7280"/>

@@ -40,6 +40,9 @@ public partial class SettingsViewModel : ViewModelBase
     private bool _autoSync;
 
     [ObservableProperty]
+    private bool _autoAddNewFiles;
+
+    [ObservableProperty]
     private long _maxCacheSizeMB;
 
     [ObservableProperty]
@@ -162,6 +165,7 @@ public partial class SettingsViewModel : ViewModelBase
             SyncIntervalSeconds = config.SyncIntervalSeconds;
             SyncServerPort = config.SyncServerPort;
             AutoSync = config.AutoSync;
+            AutoAddNewFiles = config.AutoAddNewFiles;
             MaxCacheSizeMB = config.MaxCacheSizeMB;
             CacheRetentionDays = config.CacheRetentionDays;
             KeepLocalCopies = config.KeepLocalCopies;
@@ -239,6 +243,7 @@ public partial class SettingsViewModel : ViewModelBase
         _configuration.SyncIntervalSeconds = SyncIntervalSeconds;
         _configuration.SyncServerPort = SyncServerPort;
         _configuration.AutoSync = AutoSync;
+        _configuration.AutoAddNewFiles = AutoAddNewFiles;
         _configuration.MaxCacheSizeMB = MaxCacheSizeMB;
         _configuration.CacheRetentionDays = CacheRetentionDays;
         _configuration.KeepLocalCopies = KeepLocalCopies;

@@ -21,6 +21,7 @@ public interface ISyncService : IDisposable
     Task<SyncResult> SyncAllAsync(CancellationToken cancellationToken = default);
     Task<SyncResult> SyncDocumentAsync(string documentId, CancellationToken cancellationToken = default);
     Task<SyncResult> SyncFolderAsync(string folderPath, CancellationToken cancellationToken = default);
+    Task CancelSyncItemAsync(string documentId, string pageId);
     
     Task StartAutomaticSyncAsync(int intervalSeconds);
     Task StopAutomaticSyncAsync();
