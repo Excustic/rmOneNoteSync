@@ -236,7 +236,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
     {
         try
         {
-            // Simple approach: get all local IPs and find one with the same prefix (first https://store.steampowered.com/app/2943650/FragPunk/3 octets)
+            // Simple approach: get all local IPs and find one with the same prefix (first 3 octets)
             // This is a common heuristic for home networks.
             var prefix = string.Join(".", deviceIp.Split('.').Take(3)) + ".";
 
