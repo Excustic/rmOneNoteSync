@@ -1,9 +1,9 @@
 // httpclient.c - Production HTTP client for reMarkable sync
 #include "cache_io.h"
 #include "http_simple.h"
+#include "httpserver.h"
 #include "metadata_parser.h"
 #include "version.h"
-#include "httpserver.h"
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -20,7 +20,7 @@
 #define DEFAULT_CACHE_PATH "/home/root/onenote-sync/cache/.sync_cache"
 #define DEFAULT_XOCHITL_PATH "/home/root/.local/share/remarkable/xochitl"
 #define DEFAULT_LOG_PATH "/home/root/onenote-sync/logs/httpclient.log"
-#define DEFAULT_CONFIG_PATH "/home/root/onenote-sync/httpclient.conf"
+#define CONFIG_PATH "/home/root/onenote-sync/daemon.conf"
 #define DEFAULT_INTERVAL 30
 #define DEFAULT_MAX_RETRIES 5
 #define DEFAULT_RETRY_DELAY 20
@@ -30,8 +30,8 @@
 
 // Configuration structure
 typedef struct {
-  char server_url[256];
-  char server_url_fallback[256];
+  int server_url_count;
+  char server_url[10][256];
   char api_key[128];
   int upload_interval_seconds;
   int max_retries;
@@ -44,6 +44,7 @@ typedef struct {
 // Global variables
 static volatile int keep_running = 1;
 static config_t config;
+static int last_endpoint = 0;
 static CacheHandle *cache = NULL;
 
 /**
@@ -81,8 +82,8 @@ void log_msg(const char *fmt, ...) {
  */
 void load_config_from_file() {
   // Set defaults
-  strcpy(config.server_url, DEFAULT_SERVER_URL);
-  config.server_url_fallback[0] = '\0';
+  config.server_url_count = 1;
+  strcpy(config.server_url[0], DEFAULT_SERVER_URL);
   strcpy(config.api_key, DEFAULT_API_KEY);
   config.upload_interval_seconds = DEFAULT_INTERVAL;
   config.max_retries = DEFAULT_MAX_RETRIES;
@@ -90,7 +91,10 @@ void load_config_from_file() {
   config.timeout_seconds = DEFAULT_TIMEOUT;
   config.whitelist_count = 0;
 
-  FILE *f = fopen(DEFAULT_CONFIG_PATH, "r");
+  // Clear default URLs if file has overrides
+  int found_any_url = 0;
+
+  FILE *f = fopen(CONFIG_PATH, "r");
   if (!f) {
     log_msg("No config file found, using defaults");
     return;
@@ -114,11 +118,19 @@ void load_config_from_file() {
       val++;
     val[strcspn(val, "\n\r")] = '\0';
 
-    if (strcmp(key, "SERVER_URL") == 0) {
-      strncpy(config.server_url, val, sizeof(config.server_url) - 1);
-    } else if (strcmp(key, "SERVER_URL_FALLBACK") == 0) {
-      strncpy(config.server_url_fallback, val,
-              sizeof(config.server_url_fallback) - 1);
+    if (strncmp(key, "SERVER_URL_", 11) == 0 &&
+        key[11] != 'F') { // Ensure not FALLBACK just in case
+      if (!found_any_url) {
+        config.server_url_count = 0;
+        found_any_url = 1;
+      }
+      int idx = atoi(key + 11);
+      if (idx >= 0 && idx < 10) {
+        strncpy(config.server_url[idx], val, sizeof(config.server_url[0]) - 1);
+        if (idx >= config.server_url_count) {
+          config.server_url_count = idx + 1;
+        }
+      }
     } else if (strcmp(key, "API_KEY") == 0) {
       strncpy(config.api_key, val, sizeof(config.api_key) - 1);
     } else if (strcmp(key, "UPLOAD_INTERVAL") == 0) {
@@ -181,41 +193,49 @@ int upload_file(const char *doc_id, const char *page_uuid, const char *page_num,
 
   log_msg("Uploading %s -> %s", file_path, full_virtual_path);
 
-  // Perform upload
+  // Perform upload trying multiple endpoints
   http_response_t response;
-  int result = http_post_file(config.server_url, config.api_key, file_path,
-                              full_virtual_path, doc_id, &response);
+  int result = -1;
 
-  if (result != 0) {
-    log_msg("Failed to connect to primary server %s", config.server_url);
-
-    // Try fallback URL if configured
-    if (config.server_url_fallback[0] != '\0') {
-      log_msg("Trying fallback server %s...", config.server_url_fallback);
-      result = http_post_file(config.server_url_fallback, config.api_key,
-                              file_path, full_virtual_path, doc_id, &response);
-    }
+  if (config.server_url_count == 0) {
+    log_msg("No server URLs configured");
+    return -1;
   }
 
-  if (result == 0) {
-    log_msg("Upload response: status=%d, size=%zu", response.status_code,
-            response.body_size);
+  // Try the last successful endpoint first
+  int current_endpoint = last_endpoint;
+  if (current_endpoint >= config.server_url_count) {
+    current_endpoint = 0;
+  }
 
-    if (response.status_code == 200 || response.status_code == 201) {
-      log_msg("Upload successful");
+  int attempts = 0;
+  while (attempts < config.server_url_count) {
+    log_msg("Attempting upload to %s", config.server_url[current_endpoint]);
+    result = http_post_file(config.server_url[current_endpoint], config.api_key,
+                            file_path, full_virtual_path, doc_id, &response);
+
+    if (result == 0 &&
+        (response.status_code == 200 || response.status_code == 201)) {
+      log_msg("Upload successful on endpoint %d", current_endpoint);
+      last_endpoint = current_endpoint; // Remember successful endpoint
       http_response_free(&response);
       return 0;
-    } else {
-      log_msg("Upload failed with status %d", response.status_code);
-      if (response.body) {
-        log_msg("Server error: %s", response.body);
-      }
     }
-    http_response_free(&response);
-  } else {
-    log_msg("Failed to connect to server");
+
+    log_msg("Upload failed on endpoint %d: status=%d", current_endpoint,
+            result == 0 ? response.status_code : -1);
+    if (result == 0) {
+      if (response.body)
+        log_msg("Server error: %s", response.body);
+      http_response_free(&response);
+    }
+
+    // Try next endpoint
+    current_endpoint = (current_endpoint + 1) % config.server_url_count;
+    attempts++;
   }
 
+  log_msg("All %d endpoints failed", config.server_url_count);
   return -1;
 }
 
@@ -265,7 +285,8 @@ int process_pending_pages() {
 
     // If page_num is empty (e.g., manual sync), try to populate it
     if (page->page_num[0] == '\0') {
-      parse_content_file(doc_id, page->uuid, page->page_num, sizeof(page->page_num));
+      parse_content_file(doc_id, page->uuid, page->page_num,
+                         sizeof(page->page_num));
     }
 
     // Reconstruct virtual path
@@ -327,9 +348,8 @@ int main(int argc, char **argv) {
   load_config_from_file();
 
   log_msg("Configuration:");
-  log_msg("  Server URL: %s", config.server_url);
-  if (config.server_url_fallback[0] != '\0') {
-    log_msg("  Fallback URL: %s", config.server_url_fallback);
+  for (int i = 0; i < config.server_url_count; i++) {
+    log_msg("  Server URL %d: %s", i, config.server_url[i]);
   }
   log_msg("  Api Key: %s", config.api_key);
   log_msg("  Upload interval: %d seconds", config.upload_interval_seconds);
@@ -348,11 +368,13 @@ int main(int argc, char **argv) {
 
   // Start HTTP Server
   httpserver_init(cache, &config.whitelist_count, config.whitelist);
-  httpserver_start(8000); 
+  httpserver_start(8000);
 
   // Main loop
   while (keep_running) {
     log_msg("--- Sync cycle starting ---");
+    // Load config for possible changes
+    load_config_from_file();
 
     // Process pages in queue
     int processed = process_pending_pages();

@@ -22,8 +22,11 @@ public class SyncConfiguration
 
     // Sync settings
     public List<string> SyncFiles { get; set; } = [];
+    public List<string> SyncFolders { get; set; } = [];
     public int SyncIntervalSeconds { get; set; } = 300;
     public bool AutoSync { get; set; } = true;
+    public bool AutoAddNewFiles { get; set; } = true;
+    public int MaxThreads { get; set; } = 3;
     public int SyncServerPort { get; set; } = AppSettings.DefaultServerPort;
 
     // OneNote settings
@@ -43,4 +46,8 @@ public class SyncConfiguration
     public long MaxCacheSizeMB { get; set; } = 500;
     public bool KeepLocalCopies { get; set; } = true;
     public int CacheRetentionDays { get; set; } = 30;
+
+    // Logging settings
+    public int LogRetentionDays { get; set; } = 7;
+    public int LogFileSizeLimitMB { get; set; } = 10;
 }

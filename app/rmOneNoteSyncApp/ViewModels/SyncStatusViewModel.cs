@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -352,6 +353,8 @@ public partial class SyncStatusViewModel : ViewModelBase
         }
     }
 
+    private CancellationTokenSource? _manualSyncCts;
+
     [RelayCommand]
     private async Task ProcessQueueAsync()
     {
@@ -361,14 +364,36 @@ public partial class SyncStatusViewModel : ViewModelBase
             return;
         }
 
+        _manualSyncCts = new CancellationTokenSource();
+
         try
         {
             // Allow manual user trigger through the SyncService orchestrator
-            await _syncService.SyncAllAsync();
+            await _syncService.SyncAllAsync(_manualSyncCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger?.LogInformation("Manual sync was cancelled by the user");
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to start manual sync");
+        }
+        finally
+        {
+            _manualSyncCts?.Dispose();
+            _manualSyncCts = null;
+        }
+    }
+
+    [RelayCommand]
+    private void StopSync()
+    {
+        if (_manualSyncCts != null && !_manualSyncCts.IsCancellationRequested)
+        {
+            _manualSyncCts.Cancel();
+            _logger?.LogInformation("Sent cancellation request to manual sync");
+            // Mark items explicitly? SyncAllAsync will break out of the loop natively.
         }
     }
 
@@ -399,6 +424,27 @@ public partial class SyncStatusViewModel : ViewModelBase
     [RelayCommand]
     private async Task ClearCompletedAsync()
     {
+        await LoadSyncStatusAsync();
+    }
+
+    [RelayCommand]
+    private async Task CancelSyncAsync(SyncItem? item)
+    {
+        if (item == null) return;
+        
+        await _syncService.CancelSyncItemAsync(item.DocumentId, item.PageId);
+        item.Status = SyncStatus.Skipped;
+        
+        // Remove from list if it's currently pending/inflight
+        var existing = SyncItems.FirstOrDefault(i => i.DocumentId == item.DocumentId && i.PageId == item.PageId);
+        if (existing != null)
+        {
+            SyncItems.Remove(existing);
+        }
+        
+        SortSyncItems();
+        
+        // Refresh counts
         await LoadSyncStatusAsync();
     }
 

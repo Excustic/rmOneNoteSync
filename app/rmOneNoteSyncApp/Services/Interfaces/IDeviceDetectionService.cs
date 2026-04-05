@@ -51,9 +51,9 @@ public interface IDeviceDetectionService : IDisposable
     Task<bool> CheckConnectionAsync();
 
     /// <summary>
-    /// Resets the scan attempts counter to trigger a fresh scan cycle.
+    /// Scan the network for the reMarkable (e.g., using ARP) manually.
     /// </summary>
-    void ResetWifiScanAttempts();
+    Task<bool> RunManualNetworkScanAsync();
 
     Task<string?> GetLocalIpAddressForDevice(string deviceIp);
 }

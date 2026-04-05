@@ -56,6 +56,7 @@ public partial class FolderPickerViewModel : ViewModelBase
         _sshService = sshService;
         _databaseService = databaseService;
         _deviceDetectionService = deviceDetectionService;
+        _configProvider = configurationProviderService;
 
         try
         {
@@ -435,6 +436,7 @@ public partial class FolderPickerViewModel : ViewModelBase
             var config = await _databaseService.GetConfigurationAsync() ?? new SyncConfiguration();
             // Distinct just in case
             config.SyncFiles = [.. selectedDocIds.Distinct()];
+            config.SyncFolders = [.. selectedFolders.Select(f => f.Id).Distinct()];
             await _databaseService.SaveConfigurationAsync(config);
 
             // Create stub DocumentMetadata so new Notebooks appear on the Dashboard instantly
@@ -640,5 +642,29 @@ public partial class FileNode : ObservableObject
         }
 
         return (docs, folders);
+    }
+
+    [RelayCommand]
+    private void ExpandCollapseAll()
+    {
+        if (!IsFolder) return;
+
+        bool newState = !IsExpanded;
+        SetExpandedState(this, newState);
+    }
+
+    private static void SetExpandedState(FileNode node, bool isExpanded)
+    {
+        node.IsExpanded = isExpanded;
+        if (node.Children != null)
+        {
+            foreach (var child in node.Children)
+            {
+                if (child.IsFolder)
+                {
+                    SetExpandedState(child, isExpanded);
+                }
+            }
+        }
     }
 }

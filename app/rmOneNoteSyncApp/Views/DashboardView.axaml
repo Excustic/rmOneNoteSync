@@ -16,9 +16,11 @@
             <!-- Device Info Card -->
             <Border Background="White" CornerRadius="8" BoxShadow="0 2 10 0 #10000000" Padding="20">
                 <Grid ColumnDefinitions="Auto,*">
-                    <StackPanel Grid.Column="0" Margin="0,0,40,0">
-                        <PathIcon Data="M17,2H7A2,2 0 0,0 5,4V20A2,2 0 0,0 7,22H17A2,2 0 0,0 19,20V4A2,2 0 0,0 17,2M7,4H17V20H7V4Z"
-                                 Width="64" Height="64" Foreground="#3a3d4e"/>
+                    <StackPanel Grid.Column="0" Margin="0,0,40,0" VerticalAlignment="Center">
+                        <Image Source="{Binding DeviceImage}"
+                               Width="180" Height="180"
+                               Stretch="Uniform"
+                               RenderOptions.BitmapInterpolationMode="HighQuality"/>
                     </StackPanel>
                     
                     <StackPanel Grid.Column="1" Spacing="8">

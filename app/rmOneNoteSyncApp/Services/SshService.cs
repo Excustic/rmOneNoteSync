@@ -7,6 +7,7 @@ using Renci.SshNet;
 using Microsoft.Extensions.Logging;
 using rmOneNoteSyncApp.Services.Interfaces;
 using System.Text.Json;
+using System.Net.Http;
 
 namespace rmOneNoteSyncApp.Services;
 
@@ -105,23 +106,23 @@ public class SshService(ILogger<SshService> logger) : ISshService, IDisposable
             info["Version"] = (await ExecuteCommandAsync(GetVersion)).Trim();
             info["Serial"] = (await ExecuteCommandAsync(GetSerial)).Trim();
 
-            // Check for existing sync installation
+            // Check for existing sync installation (HTTP First)
             try
             {
-                var versionFile = await ExecuteCommandAsync("cat /home/root/onenote-sync/version.json");
-                if (!string.IsNullOrWhiteSpace(versionFile) && !versionFile.Contains("No such file"))
+                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+                string versionJson = await httpClient.GetStringAsync($"http://{_currentIp}:8000/version");
+                
+                if (!string.IsNullOrWhiteSpace(versionJson))
                 {
-                    using JsonDocument doc = JsonDocument.Parse(versionFile.Trim());
+                    using JsonDocument doc = JsonDocument.Parse(versionJson);
                     info["SyncVersion"] = doc.RootElement.GetProperty("version").GetString() ?? "Unknown";
-                }
-                else
-                {
-                    info["SyncVersion"] = "Not installed";
                 }
             }
             catch
             {
-                info["SyncVersion"] = "Not installed";
+                // Fallback: Check if installation directory exists via SSH if daemon is stopped
+                var dirCheck = await ExecuteCommandAsync("test -d /home/root/onenote-sync && echo 'exists'");
+                info["SyncVersion"] = dirCheck.Contains("exists") ? "Unknown (Service Stopped)" : "Not installed";
             }
         }
         catch (Exception ex)

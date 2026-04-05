@@ -18,11 +18,13 @@ namespace rmOneNoteSyncApp.Services
     public class DeploymentService(
         ILogger<DeploymentService> logger,
         IConfigurationProviderService configProvider,
-        ISshService sshService) : IDeploymentService
+        ISshService sshService,
+        IDeviceDetectionService detectionService) : IDeploymentService
     {
         private readonly ILogger<DeploymentService> _logger = logger;
         private readonly IConfigurationProviderService _configProvider = configProvider;
         private readonly ISshService _sshService = sshService;
+        private readonly IDeviceDetectionService _detectionService = detectionService;
         public static readonly string REMOTE_BASE_PATH = "/home/root/onenote-sync";
 
         public event EventHandler<DeploymentProgressEventArgs>? DeploymentProgress;
@@ -46,7 +48,10 @@ namespace rmOneNoteSyncApp.Services
                 // Check version file
                 try
                 {
-                    string versionContent = await _sshService.ExecuteCommandAsync($"cat {REMOTE_BASE_PATH}/version.json");
+                    var deviceIp = _detectionService.CurrentDevice?.IpAddress ?? AppSettings.DefaultDeviceIp;
+                    using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                    string versionContent = await httpClient.GetStringAsync($"http://{deviceIp}:8000/version");
+                    
                     if (string.IsNullOrEmpty(versionContent))
                     {
                         throw new ArgumentNullException(nameof(versionContent));
@@ -55,13 +60,13 @@ namespace rmOneNoteSyncApp.Services
                     result.InstalledVersion = ExtractVersionFromJson(versionContent);
                     result.IsInstalled = true;
                     ReportProgress("Version found: " + result.InstalledVersion, 0.2, DeploymentStage.Checking);
-
                 }
                 catch
                 {
-                    result.IsInstalled = true;
+                    // Fallback to check if directory exists in case service is not running
+                    result.IsInstalled = dirCheck.Contains("exists");
                     result.InstalledVersion = "Unknown";
-                    ReportProgress("Version not found", 0.2, DeploymentStage.Checking);
+                    ReportProgress("Service not running or version not found", 0.2, DeploymentStage.Checking);
                 }
 
                 // Check component status
@@ -254,29 +259,11 @@ namespace rmOneNoteSyncApp.Services
         }
 
         private async Task UploadConfigurationAsync()
-        {
-            string watcherConfig = "WATCH_PATH=/home/root/.local/share/remarkable/xochitl\n" +
-                                   "LOG_PATH=/home/root/onenote-sync/logs/watcher.log\n" +
-                                   "CACHE_PATH=/home/root/onenote-sync/cache/.sync_cache";
-
-            // 1. Grab the clean version (e.g., "0.6.0") just like we did for the UI
+        {            // 1. Grab the clean version (e.g., "0.6.0") just like we did for the UI
             string versionInfo = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
             string cleanVersion = versionInfo.Split('+')[0];
 
-            // 2. Use Raw String Literals to cleanly inject variables into JSON without escaping quotes
-            string versionJson = $$"""
-            {
-              "version": "{{cleanVersion}}",
-              "installed_date": "{{DateTime.UtcNow:o}}",
-              "cache_format": "4"
-            }
-            """;
-
-            // Write configs via SSH
-            _ = await _sshService.ExecuteCommandAsync($"echo '{watcherConfig}' > {REMOTE_BASE_PATH}/watcher.conf");
-            _ = await _sshService.ExecuteCommandAsync($"echo '{versionJson}' > {REMOTE_BASE_PATH}/version.json");
-
-            // Generate httpclient.conf via ConfigurationProviderService bypassng service restart
+            // Generate daemon.conf via ConfigurationProviderService bypassng service restart
             _ = await _configProvider.UpdateDeviceConfigurationAsync(restartService: false);
         }
 
@@ -436,8 +423,7 @@ namespace rmOneNoteSyncApp.Services
         {
             try
             {
-                await _sshService.DownloadFileAsync($"{REMOTE_BASE_PATH}/watcher.conf", localPath + ".watcher");
-                await _sshService.DownloadFileAsync($"{REMOTE_BASE_PATH}/httpclient.conf", localPath + ".httpclient");
+                await _sshService.DownloadFileAsync($"{REMOTE_BASE_PATH}/daemon.conf", localPath + ".daemon");
                 return true;
             }
             catch
@@ -450,14 +436,9 @@ namespace rmOneNoteSyncApp.Services
         {
             try
             {
-                if (File.Exists(localPath + ".watcher"))
+                if (File.Exists(localPath + ".daemon"))
                 {
-                    await _sshService.UploadFileAsync(localPath + ".watcher", $"{REMOTE_BASE_PATH}/watcher.conf");
-                }
-
-                if (File.Exists(localPath + ".httpclient"))
-                {
-                    await _sshService.UploadFileAsync(localPath + ".httpclient", $"{REMOTE_BASE_PATH}/httpclient.conf");
+                    await _sshService.UploadFileAsync(localPath + ".daemon", $"{REMOTE_BASE_PATH}/daemon.conf");
                 }
 
                 return true;

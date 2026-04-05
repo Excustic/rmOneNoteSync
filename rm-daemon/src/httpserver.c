@@ -11,6 +11,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <dirent.h>
+#include "version.h"
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
@@ -428,7 +429,7 @@ static void handle_config_post(int client_fd, char* req_buffer, int received_so_
     }
     full_body[total_body_recv] = '\0';
 
-    FILE* f = fopen("/home/root/onenote-sync/httpclient.conf", "w");
+    FILE* f = fopen("/home/root/onenote-sync/daemon.conf", "w");
     if (f) {
         fwrite(full_body, 1, total_body_recv, f);
         fclose(f);
@@ -437,6 +438,46 @@ static void handle_config_post(int client_fd, char* req_buffer, int received_so_
         send_http_response(client_fd, 500, "application/json", "{\"error\":\"failed to write config\"}");
     }
     free(full_body);
+}
+
+static void handle_version_get(int client_fd) {
+    char response[256];
+    snprintf(response, sizeof(response), 
+        "{\"version\":\"%s\",\"cache_format\":\"%d\"}", 
+        APP_VERSION, CACHE_VERSION);
+    send_http_response(client_fd, 200, "application/json", response);
+}
+
+static void handle_config_get(int client_fd) {
+    FILE *f = fopen("/home/root/onenote-sync/daemon.conf", "r");
+    if (!f) {
+        send_http_response(client_fd, 404, "text/plain", "Config not found");
+        return;
+    }
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (size <= 0 || size > 1024 * 1024) {
+        fclose(f);
+        send_http_response(client_fd, 500, "text/plain", "Invalid config size");
+        return;
+    }
+
+    char *buf = malloc(size + 1);
+    if (!buf) {
+        fclose(f);
+        send_http_response(client_fd, 500, "text/plain", "Out of memory");
+        return;
+    }
+
+    size_t read_len = fread(buf, 1, size, f);
+    buf[read_len] = '\0';
+    fclose(f);
+
+    send_http_response(client_fd, 200, "text/plain", buf);
+    free(buf);
 }
 
 static void *httpserver_loop(void *arg) {
@@ -500,6 +541,10 @@ static void *httpserver_loop(void *arg) {
           send_http_response(client, 400, "application/json",
                              "{\"error\":\"invalid id\"}");
         }
+      } else if (strncmp(req, "GET /version", 12) == 0) {
+        handle_version_get(client);
+      } else if (strncmp(req, "GET /config", 11) == 0) {
+        handle_config_get(client);
       } else if (strncmp(req, "POST /config", 12) == 0) {
         handle_config_post(client, req, received);
       } else if (strncmp(req, "POST /sync", 10) == 0) {

@@ -12,6 +12,10 @@ using rmOneNoteSyncApp.Services.Platform;
 using rmOneNoteSyncApp.ViewModels;
 using Serilog;
 using Serilog.Events;
+using Microsoft.Data.Sqlite;
+using Dapper;
+using rmOneNoteSyncApp.Models;
+using System.Text.Json;
 
 namespace rmOneNoteSyncApp;
 
@@ -51,6 +55,9 @@ class Program
                         "logs",
                         "app-.log");
 
+                    // Load rotation settings from DB early
+                    var earlyConfig = LoadEarlyLoggingConfig();
+
                     Log.Logger = new LoggerConfiguration()
                         .MinimumLevel.Debug()
                         .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
@@ -59,8 +66,8 @@ class Program
                         .WriteTo.File(
                             logPath,
                             rollingInterval: RollingInterval.Day,
-                            retainedFileCountLimit: 7,
-                            fileSizeLimitBytes: 10_000_000, // 10MB per file
+                            retainedFileCountLimit: earlyConfig.LogRetentionDays,
+                            fileSizeLimitBytes: earlyConfig.LogFileSizeLimitMB * 1024L * 1024L,
                             rollOnFileSizeLimit: true,
                             shared: true,
                             flushToDiskInterval: TimeSpan.FromSeconds(1))
@@ -153,4 +160,43 @@ class Program
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace();
+
+    private static (int LogRetentionDays, int LogFileSizeLimitMB) LoadEarlyLoggingConfig()
+    {
+        // Default values
+        int retention = 7;
+        int sizeLimit = 10;
+
+        try
+        {
+            var dbPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "rmOneNoteSyncApp",
+                "sync.db");
+
+            if (File.Exists(dbPath))
+            {
+                using var connection = new SqliteConnection($"Data Source={dbPath}");
+                // No await here as we're in a synchronous context or want simple blocking read at startup
+                var json = connection.ExecuteScalar<string>(
+                    "SELECT Json FROM Configuration ORDER BY UpdatedAt DESC LIMIT 1");
+
+                if (!string.IsNullOrEmpty(json))
+                {
+                    var config = JsonSerializer.Deserialize<SyncConfiguration>(json);
+                    if (config != null)
+                    {
+                        retention = config.LogRetentionDays;
+                        sizeLimit = config.LogFileSizeLimitMB;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Fallback to defaults on any error (e.g. DB locked, schema mismatch)
+        }
+
+        return (retention, sizeLimit);
+    }
 }

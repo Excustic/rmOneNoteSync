@@ -116,6 +116,8 @@ public partial class MainViewModel : ViewModelBase
     public bool HasAuthenticationError => !string.IsNullOrEmpty(AuthenticationError);
     private const string RepositoryURL = "https://github.com/excustic/rmOneNoteSync";
 
+    public string AppVersion => $"v{Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0] ?? "Unknown"}";
+
     private string _updateUrl = "";
 
     public MainViewModel(

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -21,6 +22,8 @@ public class SyncService : ISyncService
     private readonly Timer? _autoSyncTimer;
     private bool _isSyncing;
     private CancellationTokenSource? _autoSyncCancellation;
+    private readonly ConcurrentDictionary<string, byte> _cancelledItems = new();
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> _itemCts = new();
 
     public event EventHandler<SyncProgressEventArgs>? SyncProgress;
     public event EventHandler<PageSyncCompletedEventArgs>? PageSyncCompleted;
@@ -82,31 +85,58 @@ public class SyncService : ISyncService
 
             var config = await _databaseService.GetConfigurationAsync();
             var whitelist = config?.SyncFiles ?? new List<string>();
+            var maxThreads = Math.Max(1, config?.MaxThreads ?? 3);
 
             int processed = 0;
-            var errors = new List<string>();
+            int successCount = 0;
+            int failCount = 0;
+            var errors = new ConcurrentBag<string>();
 
-            foreach (var page in pendingPages)
+            _logger.LogDebug("Starting parallel sync with MaxThreads={MaxThreads} for {Count} pages", maxThreads, pendingPages.Count);
+
+            await Parallel.ForEachAsync(pendingPages, new ParallelOptions
             {
-                if (cancellationToken.IsCancellationRequested)
-                    break;
+                MaxDegreeOfParallelism = maxThreads,
+                CancellationToken = cancellationToken
+            }, async (page, globalToken) =>
+            {
+                string itemKey = $"{page.DocumentId}_{page.PageId}";
 
-                // Enforce whitelist check to intercept unauthorized items.
+                // Skip if pre-cancelled
+                if (_cancelledItems.TryRemove(itemKey, out _))
+                {
+                    _logger.LogDebug("Skipping pre-cancelled item {Page}", page.Title);
+                    Interlocked.Increment(ref processed);
+                    return;
+                }
+
+                // Enforce whitelist
                 if (!whitelist.Contains(page.DocumentId))
                 {
-                    _logger.LogWarning("Skipping upload for {Page} (Doc: {Doc}) because its notebook is not explicitly active in Sync settings.", page.Title, page.DocumentId);
+                    _logger.LogWarning("Skipping upload for {Page} (Doc: {Doc}) — not in whitelist", page.Title, page.DocumentId);
                     await _databaseService.UpdatePageStatusAsync(page.DocumentId, page.PageId, SyncStatus.Skipped);
-                    continue;
+                    Interlocked.Increment(ref processed);
+                    return;
                 }
+
+                // Create a per-item CTS linked to the global token
+                using var itemCts = CancellationTokenSource.CreateLinkedTokenSource(globalToken);
+                _itemCts[itemKey] = itemCts;
+                var itemToken = itemCts.Token;
 
                 try
                 {
-                    ReportProgress($"Converting notes...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 1, 8);
+                    var total = pendingPages.Count;
+                    var current = Interlocked.CompareExchange(ref processed, 0, 0); // read without modifying
+
+                    ReportProgress($"Converting notes...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 1, 8);
 
                     if (!File.Exists(page.LocalFilePath))
                     {
                         throw new FileNotFoundException($"The sync service could not find the raw file: {page.LocalFilePath}");
                     }
+
+                    itemToken.ThrowIfCancellationRequested();
 
                     // 1. Convert .rm to InkML (.xml) and Presentation (.html)
                     var convResult = await _converterService.ConvertToInkMLAsync(page.LocalFilePath);
@@ -115,27 +145,15 @@ public class SyncService : ISyncService
                         throw new Exception($"Conversion to InkML failed: {convResult.ErrorMessage}");
                     }
 
+                    itemToken.ThrowIfCancellationRequested();
+
                     // 2. Parse Virtual Path to create Graph nodes
                     var (notebook, section, pageName) = ParseVirtualPath(page.VirtualPath);
                     if (section.Length > 49) section = section.Substring(0, 49);
 
                     // Ensure notebook exists
-                    ReportProgress($"Fetching Notebook...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 2, 8);
+                    ReportProgress($"Fetching Notebook...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 2, 8);
 
-                    var docEntry = await _databaseService.GetDocumentMetadataAsync(page.DocumentId);
-                    // Assign notebook name based on DB data (user may have altered it)
-                    if (docEntry is not { Parent: "" })
-                    {
-                        var parentEntry = await _databaseService.GetDocumentMetadataAsync(docEntry.Parent);
-                        if (parentEntry is not { VisibleName: "" })
-                        {
-                            notebook = "rm_" + parentEntry?.VisibleName;
-                        }
-                    }
-                    else if (docEntry is not { VisibleName: "" })
-                    {
-                        notebook = "rm_" + docEntry?.VisibleName;
-                    }
                     var notebooks = await _oneNoteClient.GetNotebooksAsync();
                     var targetNotebook = notebooks.FirstOrDefault(n => n.DisplayName == notebook);
                     if (targetNotebook == null)
@@ -143,8 +161,10 @@ public class SyncService : ISyncService
                         targetNotebook = await _oneNoteClient.CreateNotebookAsync(notebook);
                     }
 
+                    itemToken.ThrowIfCancellationRequested();
+
                     // Ensure section exists
-                    ReportProgress($"Fetching Section...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 3, 8);
+                    ReportProgress($"Fetching Section...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 3, 8);
                     var sections = await _oneNoteClient.GetSectionsAsync(targetNotebook.Id!);
                     var targetSection = sections.FirstOrDefault(s => s.DisplayName == section);
                     if (targetSection == null)
@@ -165,22 +185,26 @@ public class SyncService : ISyncService
                         }
                     }
 
+                    itemToken.ThrowIfCancellationRequested();
+
                     // Check for existing page with same title to prevent duplication
-                    ReportProgress($"Checking records...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 4, 8);
+                    ReportProgress($"Checking records...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 4, 8);
 
                     var existingPages = await _oneNoteClient.GetPagesAsync(targetSection.Id!);
                     var existingPage = existingPages.FirstOrDefault(p => p.Title == pageName);
                     if (existingPage != null)
                     {
-                        ReportProgress($"Overwriting duplicate...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 5, 8);
+                        ReportProgress($"Overwriting duplicate...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 5, 8);
                         _logger.LogDebug("Deleting existing OneNote page {Page} before upload to prevent duplication", pageName);
                         await _oneNoteClient.DeletePageAsync(existingPage.Id!);
                     }
 
-                    ReportProgress($"Preparing payload...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 6, 8);
+                    itemToken.ThrowIfCancellationRequested();
+
+                    ReportProgress($"Preparing payload...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 6, 8);
                     // 3. Read transcoded files
-                    byte[] inkmlData = await File.ReadAllBytesAsync(convResult.InkMLPath, cancellationToken);
-                    byte[] htmlData = await File.ReadAllBytesAsync(convResult.HtmlPath, cancellationToken);
+                    byte[] inkmlData = await File.ReadAllBytesAsync(convResult.InkMLPath, itemToken);
+                    byte[] htmlData = await File.ReadAllBytesAsync(convResult.HtmlPath, itemToken);
 
                     var metadata = new Dictionary<string, string>
                     {
@@ -191,7 +215,7 @@ public class SyncService : ISyncService
                     };
 
                     // 4. Upload Multipart payload
-                    ReportProgress($"Uploading page...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 7, 8);
+                    ReportProgress($"Uploading page...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 7, 8);
                     var pageId = await _oneNoteClient.UploadInkMLPageAsync(
                         targetSection.Id!,
                         pageName,
@@ -199,7 +223,9 @@ public class SyncService : ISyncService
                         htmlData,
                         metadata);
 
-                    ReportProgress($"Completing sync...", pendingPages.Count, processed, page.VirtualPath, page.DocumentId, page.PageId, 8, 8);
+                    itemToken.ThrowIfCancellationRequested();
+
+                    ReportProgress($"Completing sync...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 8, 8);
                     string? oneNoteUrl = null;
                     try
                     {
@@ -218,7 +244,7 @@ public class SyncService : ISyncService
                         null,
                         oneNoteUrl);
 
-                    // Update timestamp so recent files jump to top and dashboard lastUpdated is refreshed
+                    // Update timestamp so recent files jump to top
                     var currentDoc = await _databaseService.GetDocumentMetadataAsync(page.DocumentId);
                     if (currentDoc != null)
                     {
@@ -233,10 +259,21 @@ public class SyncService : ISyncService
                         await _databaseService.SavePageMetadataAsync(currentPage);
                     }
 
-                    result.SuccessfulDocuments++;
+                    Interlocked.Increment(ref successCount);
                     _logger.LogDebug("Successfully transcoded and uploaded {Path} to OneNote", page.VirtualPath);
                     PageSyncCompleted?.Invoke(this,
-                        new PageSyncCompletedEventArgs(page, true, errors.LastOrDefault(), oneNoteUrl));
+                        new PageSyncCompletedEventArgs(page, true, null, oneNoteUrl));
+                }
+                catch (OperationCanceledException) when (itemToken.IsCancellationRequested && !globalToken.IsCancellationRequested)
+                {
+                    // Per-item cancellation — mark as Skipped, don't propagate
+                    _logger.LogDebug("Item {Page} was cancelled by user", page.Title);
+                    await _databaseService.UpdatePageStatusAsync(page.DocumentId, page.PageId, SyncStatus.Skipped);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Global cancellation — rethrow so Parallel.ForEachAsync stops
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -249,14 +286,20 @@ public class SyncService : ISyncService
                         SyncStatus.Failed,
                         ex.Message);
 
-                    result.FailedDocuments++;
+                    Interlocked.Increment(ref failCount);
                 }
+                finally
+                {
+                    _itemCts.TryRemove(itemKey, out _);
+                    Interlocked.Increment(ref processed);
+                }
+            });
 
-                processed++;
-            }
+            result.SuccessfulDocuments = successCount;
+            result.FailedDocuments = failCount;
 
             result.Success = result.FailedDocuments == 0;
-            result.Errors = errors;
+            result.Errors = errors.ToList();
             LastSyncTime = DateTime.Now;
 
             var duration = DateTime.Now - startTime;
@@ -413,6 +456,27 @@ public class SyncService : ISyncService
         section = SanitizeOneNoteName(section);
 
         return (notebook, section, page);
+    }
+
+    public async Task CancelSyncItemAsync(string documentId, string pageId)
+    {
+        string itemKey = $"{documentId}_{pageId}";
+
+        // If the item is currently being processed, cancel its token
+        if (_itemCts.TryGetValue(itemKey, out var cts))
+        {
+            _logger.LogDebug("Cancelling in-flight sync for {ItemKey}", itemKey);
+            cts.Cancel();
+        }
+        else
+        {
+            // Not yet started — mark for skip so the worker skips it when it picks it up
+            _logger.LogDebug("Pre-cancelling queued item {ItemKey}", itemKey);
+            _cancelledItems[itemKey] = 0;
+        }
+
+        // Mark as skipped in DB
+        await _databaseService.UpdatePageStatusAsync(documentId, pageId, SyncStatus.Skipped);
     }
 
     public void Dispose()

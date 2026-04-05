@@ -20,7 +20,7 @@
 #define DEFAULT_WATCH_PATH "/home/root/.local/share/remarkable/xochitl"
 #define DEFAULT_LOG_PATH "/home/root/onenote-sync/logs/watcher.log"
 #define DEFAULT_CACHE_PATH "/home/root/onenote-sync/cache/.sync_cache"
-#define DEFAULT_CONFIG_PATH "/home/root/onenote-sync/watcher.conf"
+#define DEFAULT_CONFIG_PATH "/home/root/onenote-sync/daemon.conf"
 
 #define BUF_LEN (10 * (sizeof(struct inotify_event) + NAME_MAX + 1))
 
@@ -33,12 +33,25 @@ static CacheHandle *cache = NULL;
 #define MAX_WHITELIST_DOCS 512
 static char whitelist[MAX_WHITELIST_DOCS][UUID_LEN + 1];
 static int whitelist_count = 0;
+static int auto_add_new_files = 1;
 
 static int is_whitelisted(const char *doc_id) {
   if (whitelist_count <= 0)
     return 1;
   for (int i = 0; i < whitelist_count; i++) {
     if (strcmp(whitelist[i], doc_id) == 0)
+      return 1;
+  }
+  return 0;
+}
+
+#define MAX_SYNC_FOLDERS 512
+static char sync_folders[MAX_SYNC_FOLDERS][UUID_LEN + 1];
+static int sync_folder_count = 0;
+
+static int is_sync_folder(const char *folder_id) {
+  for (int i = 0; i < sync_folder_count; i++) {
+    if (strcmp(sync_folders[i], folder_id) == 0)
       return 1;
   }
   return 0;
@@ -129,9 +142,77 @@ void load_config() {
         strncpy(whitelist[idx], val, UUID_LEN);
         whitelist[idx][UUID_LEN] = '\0';
       }
+    } else if (strcmp(key, "SYNC_FOLDER_COUNT") == 0) {
+      sync_folder_count = atoi(val);
+      if (sync_folder_count > MAX_SYNC_FOLDERS) {
+        sync_folder_count = MAX_SYNC_FOLDERS;
+      }
+    } else if (strncmp(key, "SYNC_FOLDER_", 12) == 0) {
+      int idx = atoi(key + 12);
+      if (idx >= 0 && idx < MAX_SYNC_FOLDERS) {
+        strncpy(sync_folders[idx], val, UUID_LEN);
+        sync_folders[idx][UUID_LEN] = '\0';
+      }
+    } else if (strcmp(key, "AUTO_ADD_NEW_FILES") == 0) {
+      auto_add_new_files = atoi(val);
     }
   }
   fclose(f);
+}
+
+// Helper to rewrite whitelist blocks back to config file
+static void append_to_whitelist(const char *doc_id) {
+  if (whitelist_count >= MAX_WHITELIST_DOCS)
+    return;
+
+  // Memory limit ok
+  strncpy(whitelist[whitelist_count], doc_id, UUID_LEN);
+  whitelist[whitelist_count][UUID_LEN] = '\0';
+  whitelist_count++;
+
+  // Naive rewrite of config file: we read everything, filter out WHITELIST_,
+  // then append new whitelist
+  FILE *f = fopen(DEFAULT_CONFIG_PATH, "r");
+  if (!f)
+    return;
+
+  fseek(f, 0, SEEK_END);
+  long size = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  char *buf = malloc(size + 1);
+  if (!buf) {
+    fclose(f);
+    return;
+  }
+  size_t rb = fread(buf, 1, size, f);
+  buf[rb] = '\0';
+  fclose(f);
+
+  FILE *out = fopen(DEFAULT_CONFIG_PATH, "w");
+  if (!out) {
+    free(buf);
+    return;
+  }
+
+  char *line = strtok(buf, "\n");
+  while (line) {
+    if (strncmp(line, "WHITELIST_COUNT=", 16) != 0 &&
+        strncmp(line, "WHITELIST_", 10) != 0) {
+      fprintf(out, "%s\n", line);
+    }
+    line = strtok(NULL, "\n");
+  }
+
+  fprintf(out, "\n# Document Whitelist (Updated by Watcher)\n");
+  fprintf(out, "WHITELIST_COUNT=%d\n", whitelist_count);
+  for (int i = 0; i < whitelist_count; i++) {
+    fprintf(out, "WHITELIST_%d=%s\n", i, whitelist[i]);
+  }
+  fclose(out);
+  free(buf);
+
+  log_msg("Auto-whitelisted new file %s", doc_id);
 }
 
 /**
@@ -336,8 +417,35 @@ void process_metadata_change(const char *filename) {
   doc_id[UUID_LEN] = '\0';
 
   if (!is_whitelisted(doc_id)) {
-    log_msg("Document %s not in whitelist, skipping metadata change", doc_id);
-    return;
+    int newly_whitelisted = 0;
+    if (auto_add_new_files) {
+      char filepath[PATH_MAX];
+      snprintf(filepath, sizeof(filepath), "%s/%s", watch_path, filename);
+      FILE *tf = fopen(filepath, "r");
+      if (tf) {
+        char b[4096];
+        size_t l = fread(b, 1, sizeof(b) - 1, tf);
+        b[l] = '\0';
+        fclose(tf);
+        char ttype[64] = "";
+        char tparent[64] = "";
+        get_json_value(b, "type", ttype, sizeof(ttype));
+        get_json_value(b, "parent", tparent, sizeof(tparent));
+
+        // Note: Folder UUIDs are populated in sync_folders by the C#
+        // application
+        if (strcmp(ttype, "DocumentType") == 0 && strlen(tparent) > 0 &&
+            is_sync_folder(tparent)) {
+          append_to_whitelist(doc_id);
+          newly_whitelisted = 1;
+        }
+      }
+    }
+
+    if (!newly_whitelisted) {
+      log_msg("Document %s not in whitelist, skipping metadata change", doc_id);
+      return;
+    }
   }
 
   log_msg("Processing metadata change for document %s", doc_id);

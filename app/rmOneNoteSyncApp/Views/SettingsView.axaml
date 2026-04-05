@@ -50,7 +50,7 @@
 
                     <!-- Upload Settings Section -->
                     <TextBlock Text="Upload Settings" FontSize="16" FontWeight="SemiBold" Margin="0,15,0,5"/>
-                    <TextBlock Text="These values are written to the device configuration file (httpclient.conf) each time settings are saved."
+                    <TextBlock Text="These values are written to the device configuration file (daemon.conf) each time settings are saved."
                                Foreground="#6b7280" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,5"/>
 
                     <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="15">
@@ -135,14 +135,30 @@
                     
                     <CheckBox Content="Enable automatic sync" IsChecked="{Binding AutoSync}"/>
                     <CheckBox Content="Enable WiFi sync" IsChecked="{Binding EnableWifiSync}"/>
+                    <CheckBox Content="Auto-add new pages inside whitelisted notebooks" IsChecked="{Binding AutoAddNewFiles}"/>
                     
                     <StackPanel Spacing="5">
                         <TextBlock Text="Sync interval (seconds):" Foreground="#6b7280"/>
                         <NumericUpDown Value="{Binding SyncIntervalSeconds}" 
                                       Minimum="10" Maximum="86400" 
                                       Increment="10"
+                                      FormatString="0"
+                                      ClipValueToMinMax="True"
                                       Width="150"
                                       HorizontalAlignment="Left"/>
+                    </StackPanel>
+                    
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="Max upload threads:" Foreground="#6b7280"/>
+                        <NumericUpDown Value="{Binding MaxThreads}" 
+                                      Minimum="1" Maximum="10" 
+                                      Increment="1"
+                                      FormatString="0"
+                                      ClipValueToMinMax="True"
+                                      Width="150"
+                                      HorizontalAlignment="Left"/>
+                        <TextBlock Text="Number of pages to upload in parallel. Higher values speed up large syncs but use more resources."
+                                   Foreground="#9ca3af" FontSize="12" TextWrapping="Wrap"/>
                     </StackPanel>
                     
                     <StackPanel Spacing="5">
@@ -150,6 +166,8 @@
                         <NumericUpDown Value="{Binding SyncServerPort}" 
                                       Minimum="1024" Maximum="65535" 
                                       Increment="1"
+                                      FormatString="0"
+                                      ClipValueToMinMax="True"
                                       Width="150"
                                       HorizontalAlignment="Left"/>
                         <TextBlock Text="⚠️ Changing the port requires manual firewall configuration. Please ensure this port is open for TCP traffic."
@@ -161,29 +179,57 @@
                         <NumericUpDown Value="{Binding CacheRetentionDays}" 
                                       Minimum="1" Maximum="365" 
                                       Increment="1"
+                                      FormatString="0"
+                                      ClipValueToMinMax="True"
                                       Width="150"
                                       HorizontalAlignment="Left"/>
                     </StackPanel>
-                    
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button Content="{Binding SaveSettingsButtonText}" 
-                            Command="{Binding SaveSettingsCommand}"
-                            Background="{Binding SaveSettingsButtonBg}"
-                            Foreground="{Binding SaveSettingsButtonFg}"
-                            HorizontalAlignment="Left" Cursor="Hand">
-                            <Button.Transitions>
-                                <Transitions>
-                                    <BrushTransition Property="Background" Duration="0:0:0.2"/>
-                                    <BrushTransition Property="Foreground" Duration="0:0:0.2"/>
-                                </Transitions>
-                            </Button.Transitions>
-                        </Button>
+                </StackPanel>
+            </Border>
 
-                        <Button Content="{Binding ClearCacheButtonText}" 
-                            Command="{Binding ClearCacheCommand}"
-                            Background="{Binding ClearCacheButtonBg}" 
-                            Foreground="{Binding ClearCacheButtonFg}"
-                            HorizontalAlignment="Left" Cursor="Hand">
+            <!-- Logging Settings -->
+            <Border Background="White" CornerRadius="8" BoxShadow="0 2 10 0 #10000000" Padding="20">
+                <StackPanel Spacing="15">
+                    <TextBlock Text="Logging Settings" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10"/>
+
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="Log file retention (days):" Foreground="#6b7280"/>
+                        <NumericUpDown Value="{Binding LogRetentionDays}"
+                                      Minimum="1" Maximum="90"
+                                      Increment="1"
+                                      FormatString="0"
+                                      ClipValueToMinMax="True"
+                                      Width="150"
+                                      HorizontalAlignment="Left"/>
+                        <TextBlock Text="How many daily log files to keep before the oldest is deleted."
+                                   Foreground="#9ca3af" FontSize="12" TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="Max log file size (MB):" Foreground="#6b7280"/>
+                        <NumericUpDown Value="{Binding LogFileSizeLimitMB}"
+                                      Minimum="1" Maximum="100"
+                                      Increment="1"
+                                      FormatString="0"
+                                      ClipValueToMinMax="True"
+                                      Width="150"
+                                      HorizontalAlignment="Left"/>
+                        <TextBlock Text="A new log file is started when this size is exceeded (within the same day)."
+                                   Foreground="#9ca3af" FontSize="12" TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <TextBlock Text="⚠️ Log rotation settings take effect on the next application restart."
+                               Foreground="#d97706" FontSize="12" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <Border Background="White" CornerRadius="8" BoxShadow="0 2 10 0 #10000000" Padding="20">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="{Binding SaveSettingsButtonText}" 
+                        Command="{Binding SaveSettingsCommand}"
+                        Background="{Binding SaveSettingsButtonBg}"
+                        Foreground="{Binding SaveSettingsButtonFg}"
+                        HorizontalAlignment="Left" Cursor="Hand">
                         <Button.Transitions>
                             <Transitions>
                                 <BrushTransition Property="Background" Duration="0:0:0.2"/>
@@ -191,7 +237,19 @@
                             </Transitions>
                         </Button.Transitions>
                     </Button>
-                    </StackPanel>
+
+                    <Button Content="{Binding ClearCacheButtonText}" 
+                        Command="{Binding ClearCacheCommand}"
+                        Background="{Binding ClearCacheButtonBg}" 
+                        Foreground="{Binding ClearCacheButtonFg}"
+                        HorizontalAlignment="Left" Cursor="Hand">
+                        <Button.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="Background" Duration="0:0:0.2"/>
+                                <BrushTransition Property="Foreground" Duration="0:0:0.2"/>
+                            </Transitions>
+                        </Button.Transitions>
+                    </Button>
                 </StackPanel>
             </Border>
         </StackPanel>
