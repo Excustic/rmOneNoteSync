@@ -18,11 +18,13 @@ namespace rmOneNoteSyncApp.Services
     public class DeploymentService(
         ILogger<DeploymentService> logger,
         IConfigurationProviderService configProvider,
-        ISshService sshService) : IDeploymentService
+        ISshService sshService,
+        IDeviceDetectionService detectionService) : IDeploymentService
     {
         private readonly ILogger<DeploymentService> _logger = logger;
         private readonly IConfigurationProviderService _configProvider = configProvider;
         private readonly ISshService _sshService = sshService;
+        private readonly IDeviceDetectionService _detectionService = detectionService;
         public static readonly string REMOTE_BASE_PATH = "/home/root/onenote-sync";
 
         public event EventHandler<DeploymentProgressEventArgs>? DeploymentProgress;
@@ -46,7 +48,10 @@ namespace rmOneNoteSyncApp.Services
                 // Check version file
                 try
                 {
-                    string versionContent = await _sshService.ExecuteCommandAsync($"cat {REMOTE_BASE_PATH}/version.json");
+                    var deviceIp = _detectionService.CurrentDevice?.IpAddress ?? AppSettings.DefaultDeviceIp;
+                    using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                    string versionContent = await httpClient.GetStringAsync($"http://{deviceIp}:8000/version");
+                    
                     if (string.IsNullOrEmpty(versionContent))
                     {
                         throw new ArgumentNullException(nameof(versionContent));
@@ -55,13 +60,13 @@ namespace rmOneNoteSyncApp.Services
                     result.InstalledVersion = ExtractVersionFromJson(versionContent);
                     result.IsInstalled = true;
                     ReportProgress("Version found: " + result.InstalledVersion, 0.2, DeploymentStage.Checking);
-
                 }
                 catch
                 {
-                    result.IsInstalled = true;
+                    // Fallback to check if directory exists in case service is not running
+                    result.IsInstalled = dirCheck.Contains("exists");
                     result.InstalledVersion = "Unknown";
-                    ReportProgress("Version not found", 0.2, DeploymentStage.Checking);
+                    ReportProgress("Service not running or version not found", 0.2, DeploymentStage.Checking);
                 }
 
                 // Check component status
@@ -257,18 +262,6 @@ namespace rmOneNoteSyncApp.Services
         {            // 1. Grab the clean version (e.g., "0.6.0") just like we did for the UI
             string versionInfo = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
             string cleanVersion = versionInfo.Split('+')[0];
-
-            // 2. Use Raw String Literals to cleanly inject variables into JSON without escaping quotes
-            string versionJson = $$"""
-            {
-              "version": "{{cleanVersion}}",
-              "installed_date": "{{DateTime.UtcNow:o}}",
-              "cache_format": "4"
-            }
-            """;
-
-            // Write configs via SSH
-            _ = await _sshService.ExecuteCommandAsync($"echo '{versionJson}' > {REMOTE_BASE_PATH}/version.json");
 
             // Generate daemon.conf via ConfigurationProviderService bypassng service restart
             _ = await _configProvider.UpdateDeviceConfigurationAsync(restartService: false);

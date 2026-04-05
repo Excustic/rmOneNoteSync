@@ -131,18 +131,6 @@ void load_config_from_file() {
           config.server_url_count = idx + 1;
         }
       }
-    } else if (strcmp(key, "SERVER_URL") == 0) { // Legacy single URL
-      if (!found_any_url) {
-        config.server_url_count = 1;
-        strncpy(config.server_url[0], val, sizeof(config.server_url[0]) - 1);
-        found_any_url = 1;
-      }
-    } else if (strcmp(key, "SERVER_URL_FALLBACK") == 0) { // Legacy fallback
-      if (config.server_url_count < 10) {
-        strncpy(config.server_url[config.server_url_count], val,
-                sizeof(config.server_url[0]) - 1);
-        config.server_url_count++;
-      }
     } else if (strcmp(key, "API_KEY") == 0) {
       strncpy(config.api_key, val, sizeof(config.api_key) - 1);
     } else if (strcmp(key, "UPLOAD_INTERVAL") == 0) {
@@ -385,6 +373,8 @@ int main(int argc, char **argv) {
   // Main loop
   while (keep_running) {
     log_msg("--- Sync cycle starting ---");
+    // Load config for possible changes
+    load_config_from_file();
 
     // Process pages in queue
     int processed = process_pending_pages();

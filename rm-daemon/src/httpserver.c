@@ -11,6 +11,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <dirent.h>
+#include "version.h"
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
@@ -439,6 +440,14 @@ static void handle_config_post(int client_fd, char* req_buffer, int received_so_
     free(full_body);
 }
 
+static void handle_version_get(int client_fd) {
+    char response[256];
+    snprintf(response, sizeof(response), 
+        "{\"version\":\"%s\",\"cache_format\":\"%d\"}", 
+        APP_VERSION, CACHE_VERSION);
+    send_http_response(client_fd, 200, "application/json", response);
+}
+
 static void handle_config_get(int client_fd) {
     FILE *f = fopen("/home/root/onenote-sync/daemon.conf", "r");
     if (!f) {
@@ -532,6 +541,8 @@ static void *httpserver_loop(void *arg) {
           send_http_response(client, 400, "application/json",
                              "{\"error\":\"invalid id\"}");
         }
+      } else if (strncmp(req, "GET /version", 12) == 0) {
+        handle_version_get(client);
       } else if (strncmp(req, "GET /config", 11) == 0) {
         handle_config_get(client);
       } else if (strncmp(req, "POST /config", 12) == 0) {

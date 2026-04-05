@@ -152,6 +152,12 @@ jobs:
         chmod +x toolchain.sh
         ./toolchain.sh -y -d /opt/codex/${{ matrix.device }}
 
+    - name: Stamp Version Numbers
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        VERSION="${GITHUB_REF_NAME#v}" 
+        sed -i "s/0.0.0-PLACEHOLDER/$VERSION/g" rm-daemon/src/version.h
+
     - name: Build Daemon Binaries
       run: |
         source /opt/codex/${{ matrix.device }}/environment-setup-*

@@ -84,10 +84,10 @@ public partial class LogsViewModel : ViewModelBase
                 allLogs.AddRange(await LoadDeviceLogsAsync());
             }
 
-            // Sort by Source (Device first), then by Name
+            // Sort by Source (Device first), then by LastModified (Newest first)
             var sortedLogs = allLogs
                 .OrderBy(l => l.Source == LogSource.Device ? 0 : 1)
-                .ThenBy(l => l.Name)
+                .ThenByDescending(l => l.LastModified)
                 .ToList();
 
             foreach (var log in sortedLogs)
@@ -137,9 +137,9 @@ public partial class LogsViewModel : ViewModelBase
         var logs = new List<LogFile>();
         try
         {
-            // List log files on device
+            // List log files on device with name, size, and modified time (epoch)
             var result = await _sshService.ExecuteCommandAsync(
-                "ls -la /home/root/onenote-sync/logs/*.log 2>/dev/null | awk '{print $9 \" \" $5 \" \" $6 \" \" $7 \" \" $8}'");
+                "stat -c '%n %s %Y' /home/root/onenote-sync/logs/*.log 2>/dev/null");
 
             if (!string.IsNullOrWhiteSpace(result))
             {
@@ -147,10 +147,11 @@ public partial class LogsViewModel : ViewModelBase
                 foreach (var line in lines)
                 {
                     var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length >= 2)
+                    if (parts.Length >= 3)
                     {
                         var path = parts[0];
                         var size = long.TryParse(parts[1], out var s) ? s : 0;
+                        var epoch = long.TryParse(parts[2], out var e) ? e : 0;
 
                         logs.Add(new LogFile
                         {
@@ -158,6 +159,7 @@ public partial class LogsViewModel : ViewModelBase
                             FullPath = path,
                             Source = LogSource.Device,
                             Size = FormatFileSize(size),
+                            LastModified = epoch > 0 ? DateTimeOffset.FromUnixTimeSeconds(epoch).DateTime : DateTime.MinValue,
                             IsLocal = false
                         });
                     }

@@ -3,8 +3,10 @@ using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using rmOneNoteSyncApp.Helpers;
 using rmOneNoteSyncApp.Models;
 using Microsoft.Extensions.DependencyInjection;
 using rmOneNoteSyncApp.Services.Interfaces;
@@ -67,6 +69,10 @@ public partial class DashboardViewModel : ViewModelBase
     private bool _requiresManualScan;
     [ObservableProperty]
     private string _deviceDisplayName = "Unknown";
+    [ObservableProperty]
+    private string _deviceModel = "unknown";
+    [ObservableProperty]
+    private Bitmap? _deviceImage = ImageHelper.LoadFromResource("avares://rmOneNoteSyncApp/Assets/rm1.png");
     [ObservableProperty]
     private ObservableCollection<ActivityItem> _recentActivities = new();
 
@@ -274,6 +280,15 @@ public partial class DashboardViewModel : ViewModelBase
                     LastConnected = lastConnected;
                 }
                 DeviceDisplayName = _detectionService.CurrentDevice?.DeviceDisplayName ?? "Unknown";
+                DeviceModel = _detectionService.CurrentDevice?.Model ?? "unknown";
+                DeviceImage = DeviceModel switch
+                {
+                    "ferrari" => ImageHelper.LoadFromResource("avares://rmOneNoteSyncApp/Assets/rmpp.png"),
+                    "chiappa" => ImageHelper.LoadFromResource("avares://rmOneNoteSyncApp/Assets/rmppm.png"),
+                    "rm1" => ImageHelper.LoadFromResource("avares://rmOneNoteSyncApp/Assets/rm1.png"),
+                    "rm2" => ImageHelper.LoadFromResource("avares://rmOneNoteSyncApp/Assets/rm2.png"),
+                    _ => ImageHelper.LoadFromResource("avares://rmOneNoteSyncApp/Assets/rm1.png"),
+                };
                 DeviceIp = _detectionService.IsConnected ? _detectionService.CurrentDevice?.IpAddress ?? "--" : config != null ? config.DeviceIp : "--";
 
                 TotalDocuments = config?.SyncFiles.Count ?? 0;
@@ -421,7 +436,7 @@ public partial class DashboardViewModel : ViewModelBase
         });
 
         bool found = await _detectionService.RunManualNetworkScanAsync();
-        if (!found) 
+        if (!found)
         {
             await _detectionService.CheckConnectionAsync();
         }

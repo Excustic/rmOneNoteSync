@@ -71,7 +71,8 @@ public class ConfigurationProviderService(
             var configUrl = $"http://{deviceIp}:8000/config";
             var existingEndpoints = new HashSet<string>();
 
-            using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            // The timeout is set here initially to avoid InvalidOperationException later
+            using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             try
             {
                 var existingConfig = await httpClient.GetStringAsync(configUrl);
@@ -122,10 +123,16 @@ public class ConfigurationProviderService(
             for (int i = 0; i < syncFileIds.Count; i++)
                 configBuilder.AppendLine($"WHITELIST_{i}={syncFileIds[i]}");
 
+            var syncFolders = config?.SyncFolders ?? [];
+            configBuilder.AppendLine();
+            configBuilder.AppendLine("# Sync Folders");
+            configBuilder.AppendLine($"SYNC_FOLDER_COUNT={syncFolders.Count}");
+            for (int i = 0; i < syncFolders.Count; i++)
+                configBuilder.AppendLine($"SYNC_FOLDER_{i}={syncFolders[i]}");
+
             // Step 5: Post config to device via HTTP (non-SSH)
             logger.LogDebug("Posting config to {Url}", configUrl);
 
-            httpClient.Timeout = TimeSpan.FromSeconds(10);
             var content = new StringContent(configBuilder.ToString(), Encoding.UTF8, "text/plain");
             var response = await httpClient.PostAsync(configUrl, content);
 

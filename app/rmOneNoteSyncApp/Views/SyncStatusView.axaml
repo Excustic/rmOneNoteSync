@@ -98,8 +98,12 @@
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10">
                         <Button Content="Process Queue" 
                                 Command="{Binding ProcessQueueCommand}"
-                                IsEnabled="{Binding !IsSyncing}"
+                                IsVisible="{Binding !IsSyncing}"
                                 Classes="primary"/>
+                        <Button Content="Stop Sync" 
+                                Command="{Binding StopSyncCommand}"
+                                IsVisible="{Binding IsSyncing}"
+                                Classes="danger"/>
                         <Button Content="Retry Failed" 
                                 Command="{Binding RetryFailedCommand}"
                                 IsEnabled="{Binding !IsSyncing}"/>
@@ -128,13 +132,17 @@
                               MinHeight="300"
                               MaxHeight="500"
                               IsReadOnly="True">
-                        <DataGrid.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="Cancel Sync" 
-                                          Command="{ReflectionBinding $parent[UserControl].DataContext.CancelSyncCommand}" 
-                                          CommandParameter="{Binding}" />
-                            </ContextMenu>
-                        </DataGrid.ContextMenu>
+                        <DataGrid.Styles>
+                            <Style Selector="DataGridRow">
+                                <Setter Property="ContextMenu">
+                                    <ContextMenu>
+                                        <MenuItem Header="Cancel Sync" 
+                                                  Command="{ReflectionBinding $parent[UserControl].DataContext.CancelSyncCommand}" 
+                                                  CommandParameter="{Binding}" />
+                                    </ContextMenu>
+                                </Setter>
+                            </Style>
+                        </DataGrid.Styles>
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Virtual Path" 
                                                 Binding="{Binding VirtualPath, Mode=OneWay}" 

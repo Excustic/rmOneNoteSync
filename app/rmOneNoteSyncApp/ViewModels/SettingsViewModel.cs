@@ -43,6 +43,9 @@ public partial class SettingsViewModel : ViewModelBase
     private bool _autoAddNewFiles;
 
     [ObservableProperty]
+    private int _maxThreads;
+
+    [ObservableProperty]
     private long _maxCacheSizeMB;
 
     [ObservableProperty]
@@ -59,6 +62,12 @@ public partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     private int _timeoutSeconds;
+
+    [ObservableProperty]
+    private int _logRetentionDays;
+
+    [ObservableProperty]
+    private int _logFileSizeLimitMB;
 
     private bool _isResettingConfig;
     [ObservableProperty] private string _resetConfigButtonText = "Reset to Defaults";
@@ -166,12 +175,15 @@ public partial class SettingsViewModel : ViewModelBase
             SyncServerPort = config.SyncServerPort;
             AutoSync = config.AutoSync;
             AutoAddNewFiles = config.AutoAddNewFiles;
+            MaxThreads = config.MaxThreads;
             MaxCacheSizeMB = config.MaxCacheSizeMB;
             CacheRetentionDays = config.CacheRetentionDays;
             KeepLocalCopies = config.KeepLocalCopies;
             MaxRetries = config.MaxRetries;
             RetryDelaySeconds = config.RetryDelaySeconds;
             TimeoutSeconds = config.TimeoutSeconds;
+            LogRetentionDays = config.LogRetentionDays;
+            LogFileSizeLimitMB = config.LogFileSizeLimitMB;
         }
     }
     [RelayCommand]
@@ -244,12 +256,15 @@ public partial class SettingsViewModel : ViewModelBase
         _configuration.SyncServerPort = SyncServerPort;
         _configuration.AutoSync = AutoSync;
         _configuration.AutoAddNewFiles = AutoAddNewFiles;
+        _configuration.MaxThreads = MaxThreads;
         _configuration.MaxCacheSizeMB = MaxCacheSizeMB;
         _configuration.CacheRetentionDays = CacheRetentionDays;
         _configuration.KeepLocalCopies = KeepLocalCopies;
         _configuration.MaxRetries = MaxRetries;
         _configuration.RetryDelaySeconds = RetryDelaySeconds;
         _configuration.TimeoutSeconds = TimeoutSeconds;
+        _configuration.LogRetentionDays = LogRetentionDays;
+        _configuration.LogFileSizeLimitMB = LogFileSizeLimitMB;
 
         // 1. Loading State
         SaveSettingsButtonText = "Saving...";

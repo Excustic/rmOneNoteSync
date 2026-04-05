@@ -270,28 +270,30 @@ public class SyncServerService : ISyncServerService
 
         if (!isWhiteListed)
         {
-            _logger.LogDebug("Dropping unwhitelisted file transmission: {Path}", documentPath);
-            response.StatusCode = 200;
-            await WriteJsonResponse(response, new
+            if (config != null && config.AutoAddNewFiles)
             {
-                status = "success",
-                message = "File uploaded successfully",
-                document_id = documentId,
-                page_id = pageId,
-                notebook = notebook,
-                section = section,
-                page = pageName,
-                size = 0,
-                timestamp = DateTime.UtcNow.ToString("O")
-            });
-            // Can be useful later - need to update the client to handle this response
-            // await WriteJsonResponse(response, new
-            // {
-            //     status = "skipped",
-            //     message = "File is not tracked in the current Sync Configuration",
-            //     document_id = documentId
-            // });
-            return;
+                _logger.LogInformation("Auto-adding newly received document {DocId} to whitelist", documentId);
+                config.SyncFiles.Add(documentId);
+                await _databaseService.SaveConfigurationAsync(config);
+            }
+            else
+            {
+                _logger.LogDebug("Dropping unwhitelisted file transmission: {Path}", documentPath);
+                response.StatusCode = 200;
+                await WriteJsonResponse(response, new
+                {
+                    status = "success",
+                    message = "File uploaded successfully",
+                    document_id = documentId,
+                    page_id = pageId,
+                    notebook = notebook,
+                    section = section,
+                    page = pageName,
+                    size = 0,
+                    timestamp = DateTime.UtcNow.ToString("O")
+                });
+                return;
+            }
         }
 
         _logger.LogInformation("Receiving file {Path} corresponding to notebook '{Notebook}', section '{Section}' (DocId: {DocId})",
@@ -324,8 +326,9 @@ public class SyncServerService : ISyncServerService
             {
                 DocumentId = documentId,
                 VisibleName = section,
-                Type = "CollectionType",
+                Type = "DocumentType",
                 Parent = "",
+                VirtualPath = documentPath,
                 LastModified = DateTime.UtcNow
             });
         }
