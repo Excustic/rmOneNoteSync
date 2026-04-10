@@ -14,6 +14,11 @@ public interface IDeviceDetectionService : IDisposable
     /// Event raised when device connection status changes
     /// </summary>
     event EventHandler<DeviceConnectionEventArgs>? DeviceConnectionChanged;
+    
+    /// <summary>
+    /// Event raised when the device's IP address is updated (e.g. after a network scan)
+    /// </summary>
+    event EventHandler<string>? IpAddressUpdated;
 
     /// <summary>
     /// Current connection status

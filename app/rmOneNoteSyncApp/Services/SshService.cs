@@ -188,12 +188,11 @@ public class SshService(ILogger<SshService> logger) : ISshService, IDisposable
             await ExecuteCommandAsync("dhclient wlan0 2>/dev/null || true");
 
             // Verify Wi-Fi has an IP address
-            var wifiIp = await ExecuteCommandAsync(
-                "ip addr show wlan0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1");
+            var wifiIp = await GetWifiIpAsync();
 
             var success = !string.IsNullOrWhiteSpace(wifiIp);
             logger.LogDebug("WiFi enabled: {Success}, IP: {IP}",
-                success, wifiIp.Trim());
+                success, wifiIp ?? "None");
 
             return success;
         }
@@ -201,6 +200,21 @@ public class SshService(ILogger<SshService> logger) : ISshService, IDisposable
         {
             logger.LogError(ex, "Failed to enable WiFi over SSH");
             return false;
+        }
+    }
+
+    public async Task<string?> GetWifiIpAsync()
+    {
+        try
+        {
+            var output = await ExecuteCommandAsync(
+                "ip addr show wlan0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1");
+            return string.IsNullOrWhiteSpace(output) ? null : output.Trim();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to get WiFi IP address from device");
+            return null;
         }
     }
 
@@ -261,53 +275,6 @@ public class SshService(ILogger<SshService> logger) : ISshService, IDisposable
         catch
         {
             return false;
-        }
-    }
-
-    public async Task UpdateServerUrlFallbackAsync(string ip)
-    {
-        if (_sshClient is not { IsConnected: true })
-        {
-            logger.LogWarning("Cannot update server fallback: SSH not connected");
-            return;
-        }
-
-        try
-        {
-            var configPath = DeploymentService.REMOTE_BASE_PATH;
-            var confFile = Path.Combine(configPath, "httpclient.conf");
-            var newLine = $"{ServerUrlFallback}=http://{ip}:8080";
-
-            logger.LogDebug("Updating {ServerUrlFallback} to {IP} on device", ServerUrlFallback, ip);
-
-            // Ensure directory exists
-            await ExecuteCommandAsync($"mkdir -p {configPath}");
-
-            // Check if file exists and contains the key
-            var checkCmd = $"grep -q '{ServerUrlFallback}=.*' {confFile}";
-            var fileExists = await Task.Run(() =>
-            {
-                using var cmd = _sshClient.CreateCommand(checkCmd);
-                cmd.Execute();
-                return cmd.ExitStatus == 0;
-            });
-
-            if (fileExists)
-            {
-                // Update existing line
-                await ExecuteCommandAsync($"sed -i 's|{ServerUrlFallback}=.*|{newLine}|' {confFile}");
-            }
-            else
-            {
-                // Append to file
-                await ExecuteCommandAsync($"echo '{newLine}' >> {confFile}");
-            }
-
-            logger.LogDebug("Successfully updated {ServerUrlFallback}", ServerUrlFallback);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to update {ServerUrlFallback} on device", ServerUrlFallback);
         }
     }
 

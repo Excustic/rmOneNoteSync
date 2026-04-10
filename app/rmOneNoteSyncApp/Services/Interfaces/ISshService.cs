@@ -83,15 +83,17 @@ public interface ISshService : IDisposable
     /// </summary>
     event EventHandler<bool>? OnConnectionChanged;
 
-    /// <summary>
-    /// Updates the SERVER_URL_FALLBACK in /home/root/onenote-sync/http.conf
-    /// </summary>
-    /// <param name="ip">The host IP to inject</param>
-    Task UpdateServerUrlFallbackAsync(string ip);
+
 
     /// <summary>
     /// Gets the MAC address of the reMarkable device.
     /// </summary>
     /// <returns>The MAC address of the reMarkable device.</returns>
     Task<string?> GetMacAddressAsync();
+
+    /// <summary>
+    /// Gets the IP address of the WiFi interface (wlan0) on the reMarkable.
+    /// </summary>
+    /// <returns>The WiFi IP address, or null if not assigned.</returns>
+    Task<string?> GetWifiIpAsync();
 }

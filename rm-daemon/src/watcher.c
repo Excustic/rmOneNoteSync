@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/inotify.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -21,6 +22,7 @@
 #define DEFAULT_LOG_PATH "/home/root/onenote-sync/logs/watcher.log"
 #define DEFAULT_CACHE_PATH "/home/root/onenote-sync/cache/.sync_cache"
 #define DEFAULT_CONFIG_PATH "/home/root/onenote-sync/daemon.conf"
+#define WHITELIST_PATH "/home/root/onenote-sync/whitelist.dat"
 
 #define BUF_LEN (10 * (sizeof(struct inotify_event) + NAME_MAX + 1))
 
@@ -100,118 +102,140 @@ void log_msg(const char *fmt, ...) {
 }
 
 /**
- * load_config - Load configuration from file
+ * load_config - Load configuration from daemon.conf and whitelist.dat
+ * daemon.conf: paths and general settings (watch_path, log_path, cache_path, auto_add)
+ * whitelist.dat: whitelist entries and sync folder entries
  */
 void load_config() {
+  // --- Part 1: Load daemon.conf for paths and general settings ---
   FILE *f = fopen(DEFAULT_CONFIG_PATH, "r");
-  if (!f)
-    return;
+  if (f) {
+    int fd = fileno(f);
+    flock(fd, LOCK_SH);
 
-  char line[512];
-  while (fgets(line, sizeof(line), f)) {
-    if (line[0] == '#' || line[0] == '\n' || line[0] == '\r')
-      continue;
+    char line[512];
+    while (fgets(line, sizeof(line), f)) {
+      if (line[0] == '#' || line[0] == '\n' || line[0] == '\r')
+        continue;
 
-    char *eq = strchr(line, '=');
-    if (!eq)
-      continue;
+      char *eq = strchr(line, '=');
+      if (!eq)
+        continue;
 
-    *eq = '\0';
-    char *key = line;
-    char *val = eq + 1;
+      *eq = '\0';
+      char *key = line;
+      char *val = eq + 1;
+      while (*val == ' ' || *val == '\t')
+        val++;
+      val[strcspn(val, "\n\r")] = '\0';
 
-    // Trim whitespace
-    while (*val == ' ' || *val == '\t')
-      val++;
-    val[strcspn(val, "\n\r")] = '\0';
-
-    if (strcmp(key, "WATCH_PATH") == 0) {
-      strncpy(watch_path, val, PATH_MAX - 1);
-    } else if (strcmp(key, "LOG_PATH") == 0) {
-      strncpy(log_path, val, PATH_MAX - 1);
-    } else if (strcmp(key, "CACHE_PATH") == 0) {
-      strncpy(cache_path, val, PATH_MAX - 1);
-    } else if (strcmp(key, "WHITELIST_COUNT") == 0) {
-      whitelist_count = atoi(val);
-      if (whitelist_count > MAX_WHITELIST_DOCS) {
-        whitelist_count = MAX_WHITELIST_DOCS;
+      if (strcmp(key, "WATCH_PATH") == 0) {
+        strncpy(watch_path, val, PATH_MAX - 1);
+      } else if (strcmp(key, "LOG_PATH") == 0) {
+        strncpy(log_path, val, PATH_MAX - 1);
+      } else if (strcmp(key, "CACHE_PATH") == 0) {
+        strncpy(cache_path, val, PATH_MAX - 1);
+      } else if (strcmp(key, "AUTO_ADD_NEW_FILES") == 0) {
+        auto_add_new_files = atoi(val);
       }
-    } else if (strncmp(key, "WHITELIST_", 10) == 0) {
-      int idx = atoi(key + 10);
-      if (idx >= 0 && idx < MAX_WHITELIST_DOCS) {
-        strncpy(whitelist[idx], val, UUID_LEN);
-        whitelist[idx][UUID_LEN] = '\0';
-      }
-    } else if (strcmp(key, "SYNC_FOLDER_COUNT") == 0) {
-      sync_folder_count = atoi(val);
-      if (sync_folder_count > MAX_SYNC_FOLDERS) {
-        sync_folder_count = MAX_SYNC_FOLDERS;
-      }
-    } else if (strncmp(key, "SYNC_FOLDER_", 12) == 0) {
-      int idx = atoi(key + 12);
-      if (idx >= 0 && idx < MAX_SYNC_FOLDERS) {
-        strncpy(sync_folders[idx], val, UUID_LEN);
-        sync_folders[idx][UUID_LEN] = '\0';
-      }
-    } else if (strcmp(key, "AUTO_ADD_NEW_FILES") == 0) {
-      auto_add_new_files = atoi(val);
     }
+
+    flock(fd, LOCK_UN);
+    fclose(f);
   }
-  fclose(f);
+
+  // --- Part 2: Load whitelist.dat for whitelist and sync_folder entries ---
+  whitelist_count = 0;
+  sync_folder_count = 0;
+
+  FILE *wf = fopen(WHITELIST_PATH, "r");
+  if (wf) {
+    int wfd = fileno(wf);
+    flock(wfd, LOCK_SH);
+
+    char line[512];
+    while (fgets(line, sizeof(line), wf)) {
+      if (line[0] == '#' || line[0] == '\n' || line[0] == '\r')
+        continue;
+
+      char *eq = strchr(line, '=');
+      if (!eq)
+        continue;
+
+      *eq = '\0';
+      char *key = line;
+      char *val = eq + 1;
+      while (*val == ' ' || *val == '\t')
+        val++;
+      val[strcspn(val, "\n\r")] = '\0';
+
+      if (strncmp(key, "WHITELIST_", 10) == 0 &&
+          strcmp(key, "WHITELIST_COUNT") != 0) {
+        int idx = atoi(key + 10);
+        if (idx >= 0 && idx < MAX_WHITELIST_DOCS) {
+          strncpy(whitelist[idx], val, UUID_LEN);
+          whitelist[idx][UUID_LEN] = '\0';
+          if (idx >= whitelist_count)
+            whitelist_count = idx + 1;
+        }
+      } else if (strncmp(key, "SYNC_FOLDER_", 12) == 0 &&
+                 strcmp(key, "SYNC_FOLDER_COUNT") != 0) {
+        int idx = atoi(key + 12);
+        if (idx >= 0 && idx < MAX_SYNC_FOLDERS) {
+          strncpy(sync_folders[idx], val, UUID_LEN);
+          sync_folders[idx][UUID_LEN] = '\0';
+          if (idx >= sync_folder_count)
+            sync_folder_count = idx + 1;
+        }
+      }
+    }
+
+    flock(wfd, LOCK_UN);
+    fclose(wf);
+  }
 }
 
-// Helper to rewrite whitelist blocks back to config file
+/**
+ * append_to_whitelist - Add a document to whitelist.dat atomically
+ * Uses flock + write-to-tmp + rename for safe concurrent access.
+ */
 static void append_to_whitelist(const char *doc_id) {
   if (whitelist_count >= MAX_WHITELIST_DOCS)
     return;
 
-  // Memory limit ok
+  // Update in-memory whitelist
   strncpy(whitelist[whitelist_count], doc_id, UUID_LEN);
   whitelist[whitelist_count][UUID_LEN] = '\0';
   whitelist_count++;
 
-  // Naive rewrite of config file: we read everything, filter out WHITELIST_,
-  // then append new whitelist
-  FILE *f = fopen(DEFAULT_CONFIG_PATH, "r");
-  if (!f)
-    return;
+  // Rewrite whitelist.dat with all current entries (whitelist + sync_folders)
+  char tmp_path[PATH_MAX];
+  snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", WHITELIST_PATH);
 
-  fseek(f, 0, SEEK_END);
-  long size = ftell(f);
-  fseek(f, 0, SEEK_SET);
+  FILE *out = fopen(tmp_path, "w");
+  if (!out) return;
 
-  char *buf = malloc(size + 1);
-  if (!buf) {
-    fclose(f);
-    return;
-  }
-  size_t rb = fread(buf, 1, size, f);
-  buf[rb] = '\0';
-  fclose(f);
+  int fd = fileno(out);
+  flock(fd, LOCK_EX);
 
-  FILE *out = fopen(DEFAULT_CONFIG_PATH, "w");
-  if (!out) {
-    free(buf);
-    return;
-  }
-
-  char *line = strtok(buf, "\n");
-  while (line) {
-    if (strncmp(line, "WHITELIST_COUNT=", 16) != 0 &&
-        strncmp(line, "WHITELIST_", 10) != 0) {
-      fprintf(out, "%s\n", line);
-    }
-    line = strtok(NULL, "\n");
-  }
-
-  fprintf(out, "\n# Document Whitelist (Updated by Watcher)\n");
+  fprintf(out, "# Sync whitelist — managed by rm-daemon\n\n");
+  fprintf(out, "# Document Whitelist\n");
   fprintf(out, "WHITELIST_COUNT=%d\n", whitelist_count);
   for (int i = 0; i < whitelist_count; i++) {
     fprintf(out, "WHITELIST_%d=%s\n", i, whitelist[i]);
   }
-  fclose(out);
-  free(buf);
 
+  fprintf(out, "\n# Sync Folders\n");
+  fprintf(out, "SYNC_FOLDER_COUNT=%d\n", sync_folder_count);
+  for (int i = 0; i < sync_folder_count; i++) {
+    fprintf(out, "SYNC_FOLDER_%d=%s\n", i, sync_folders[i]);
+  }
+
+  fflush(out);
+  flock(fd, LOCK_UN);
+  fclose(out);
+
+  rename(tmp_path, WHITELIST_PATH);
   log_msg("Auto-whitelisted new file %s", doc_id);
 }
 

@@ -22,6 +22,8 @@ public interface ISyncService : IDisposable
     Task<SyncResult> SyncDocumentAsync(string documentId, CancellationToken cancellationToken = default);
     Task<SyncResult> SyncFolderAsync(string folderPath, CancellationToken cancellationToken = default);
     Task CancelSyncItemAsync(string documentId, string pageId);
+    Task RecoverInProgressItemsAsync();
+    void TriggerSync();
     
     Task StartAutomaticSyncAsync(int intervalSeconds);
     Task StopAutomaticSyncAsync();
@@ -37,6 +39,7 @@ public class SyncProgressEventArgs : EventArgs
     public string? CurrentPageId { get; set; }
     public int CurrentStep { get; set; }
     public int TotalSteps { get; set; }
+    public SyncStatus Status { get; set; } = SyncStatus.Pending;
     public double ProgressPercentage => TotalItems > 0 ? (ProcessedItems * 100.0 / TotalItems) : 0;
 }
 

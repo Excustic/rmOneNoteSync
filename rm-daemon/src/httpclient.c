@@ -9,18 +9,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
 // Configuration defaults
-#define DEFAULT_SERVER_URL "http://192.168.1.100:8080/upload"
+#define DEFAULT_SERVER_URL "http://192.168.1.100:8080"
 #define DEFAULT_API_KEY "test-api-key"
 
 #define DEFAULT_CACHE_PATH "/home/root/onenote-sync/cache/.sync_cache"
 #define DEFAULT_XOCHITL_PATH "/home/root/.local/share/remarkable/xochitl"
 #define DEFAULT_LOG_PATH "/home/root/onenote-sync/logs/httpclient.log"
 #define CONFIG_PATH "/home/root/onenote-sync/daemon.conf"
+#define ENDPOINTS_PATH "/home/root/onenote-sync/endpoints.conf"
+#define WHITELIST_PATH "/home/root/onenote-sync/whitelist.dat"
 #define DEFAULT_INTERVAL 30
 #define DEFAULT_MAX_RETRIES 5
 #define DEFAULT_RETRY_DELAY 20
@@ -80,25 +83,18 @@ void log_msg(const char *fmt, ...) {
 /**
  * load_config_from_file - Load configuration from local file
  */
-void load_config_from_file() {
-  // Set defaults
-  config.server_url_count = 1;
-  strcpy(config.server_url[0], DEFAULT_SERVER_URL);
-  strcpy(config.api_key, DEFAULT_API_KEY);
-  config.upload_interval_seconds = DEFAULT_INTERVAL;
-  config.max_retries = DEFAULT_MAX_RETRIES;
-  config.retry_delay_seconds = DEFAULT_RETRY_DELAY;
-  config.timeout_seconds = DEFAULT_TIMEOUT;
-  config.whitelist_count = 0;
-
-  // Clear default URLs if file has overrides
-  int found_any_url = 0;
-
+/**
+ * load_config_settings - Load daemon settings from daemon.conf
+ */
+static void load_config_settings() {
   FILE *f = fopen(CONFIG_PATH, "r");
   if (!f) {
-    log_msg("No config file found, using defaults");
+    log_msg("No daemon.conf found, using defaults");
     return;
   }
+
+  int fd = fileno(f);
+  flock(fd, LOCK_SH);
 
   char line[512];
   while (fgets(line, sizeof(line), f)) {
@@ -112,26 +108,11 @@ void load_config_from_file() {
     *eq = '\0';
     char *key = line;
     char *val = eq + 1;
-
-    // Trim whitespace
     while (*val == ' ' || *val == '\t')
       val++;
     val[strcspn(val, "\n\r")] = '\0';
 
-    if (strncmp(key, "SERVER_URL_", 11) == 0 &&
-        key[11] != 'F') { // Ensure not FALLBACK just in case
-      if (!found_any_url) {
-        config.server_url_count = 0;
-        found_any_url = 1;
-      }
-      int idx = atoi(key + 11);
-      if (idx >= 0 && idx < 10) {
-        strncpy(config.server_url[idx], val, sizeof(config.server_url[0]) - 1);
-        if (idx >= config.server_url_count) {
-          config.server_url_count = idx + 1;
-        }
-      }
-    } else if (strcmp(key, "API_KEY") == 0) {
+    if (strcmp(key, "API_KEY") == 0) {
       strncpy(config.api_key, val, sizeof(config.api_key) - 1);
     } else if (strcmp(key, "UPLOAD_INTERVAL") == 0) {
       config.upload_interval_seconds = atoi(val);
@@ -141,22 +122,172 @@ void load_config_from_file() {
       config.retry_delay_seconds = atoi(val);
     } else if (strcmp(key, "TIMEOUT") == 0) {
       config.timeout_seconds = atoi(val);
-    } else if (strcmp(key, "WHITELIST_COUNT") == 0) {
-      config.whitelist_count = atoi(val);
-      if (config.whitelist_count > MAX_WHITELIST_DOCS) {
-        config.whitelist_count = MAX_WHITELIST_DOCS;
-      }
-    } else if (strncmp(key, "WHITELIST_", 10) == 0) {
+    }
+  }
+
+  flock(fd, LOCK_UN);
+  fclose(f);
+}
+
+/**
+ * load_config_endpoints - Load server URLs from endpoints.conf
+ * URLs are stored without /upload suffix; it is appended at upload time.
+ * The file order represents priority (first = highest priority).
+ */
+static void load_config_endpoints() {
+  config.server_url_count = 0;
+
+  FILE *f = fopen(ENDPOINTS_PATH, "r");
+  if (!f) {
+    // No endpoints file — keep default
+    log_msg("No endpoints.conf found, using default endpoint");
+    config.server_url_count = 1;
+    strcpy(config.server_url[0], DEFAULT_SERVER_URL);
+    return;
+  }
+
+  int fd = fileno(f);
+  flock(fd, LOCK_SH);
+
+  char line[512];
+  while (fgets(line, sizeof(line), f) && config.server_url_count < 10) {
+    // Trim
+    char *p = line;
+    while (*p == ' ' || *p == '\t') p++;
+    p[strcspn(p, "\n\r")] = '\0';
+    if (*p == '#' || *p == '\0') continue;
+
+    // Strip trailing slash and /upload suffix for consistency
+    size_t len = strlen(p);
+    if (len > 0 && p[len - 1] == '/') {
+        p[--len] = '\0';
+    }
+    if (len > 7 && strcmp(p + len - 7, "/upload") == 0) {
+        p[len - 7] = '\0';
+    }
+
+    strncpy(config.server_url[config.server_url_count], p,
+            sizeof(config.server_url[0]) - 1);
+    config.server_url[config.server_url_count]
+        [sizeof(config.server_url[0]) - 1] = '\0';
+    config.server_url_count++;
+  }
+
+  flock(fd, LOCK_UN);
+  fclose(f);
+
+  if (config.server_url_count == 0) {
+    config.server_url_count = 1;
+    strcpy(config.server_url[0], DEFAULT_SERVER_URL);
+  }
+}
+
+/**
+ * load_config_whitelist - Load document whitelist from whitelist.dat
+ */
+static void load_config_whitelist() {
+  config.whitelist_count = 0;
+
+  FILE *f = fopen(WHITELIST_PATH, "r");
+  if (!f) {
+    log_msg("No whitelist.dat found, whitelist empty");
+    return;
+  }
+
+  int fd = fileno(f);
+  flock(fd, LOCK_SH);
+
+  char line[512];
+  while (fgets(line, sizeof(line), f)) {
+    if (line[0] == '#' || line[0] == '\n' || line[0] == '\r')
+      continue;
+
+    char *eq = strchr(line, '=');
+    if (!eq) continue;
+
+    *eq = '\0';
+    char *key = line;
+    char *val = eq + 1;
+    while (*val == ' ' || *val == '\t') val++;
+    val[strcspn(val, "\n\r")] = '\0';
+
+    if (strncmp(key, "WHITELIST_", 10) == 0 &&
+        strcmp(key, "WHITELIST_COUNT") != 0) {
       int idx = atoi(key + 10);
       if (idx >= 0 && idx < MAX_WHITELIST_DOCS) {
         strncpy(config.whitelist[idx], val, UUID_LEN);
         config.whitelist[idx][UUID_LEN] = '\0';
+        if (idx >= config.whitelist_count)
+          config.whitelist_count = idx + 1;
       }
+    } else if (strcmp(key, "WHITELIST_COUNT") == 0) {
+      int count = atoi(val);
+      if (count > MAX_WHITELIST_DOCS) count = MAX_WHITELIST_DOCS;
+      // WHITELIST_COUNT is informational; actual count is derived from entries
     }
   }
 
+  flock(fd, LOCK_UN);
   fclose(f);
-  log_msg("Config loaded from file");
+}
+
+/**
+ * reorder_endpoints - Move the successful URL to the top of endpoints.conf
+ * Implements a priority-queue behavior: last successful = highest priority.
+ */
+static void reorder_endpoints(int successful_idx) {
+  if (successful_idx <= 0 || config.server_url_count <= 1) return;
+
+  // Swap in memory
+  char tmp_url[256];
+  strncpy(tmp_url, config.server_url[successful_idx], sizeof(tmp_url) - 1);
+  tmp_url[sizeof(tmp_url) - 1] = '\0';
+
+  // Shift down
+  for (int i = successful_idx; i > 0; i--) {
+    strncpy(config.server_url[i], config.server_url[i - 1],
+            sizeof(config.server_url[0]) - 1);
+  }
+  strncpy(config.server_url[0], tmp_url, sizeof(config.server_url[0]) - 1);
+
+  // Persist to file
+  FILE *f = fopen(ENDPOINTS_PATH ".tmp", "w");
+  if (!f) return;
+  int fd = fileno(f);
+  flock(fd, LOCK_EX);
+
+  fprintf(f, "# Server endpoints — managed by rm-daemon\n");
+  for (int i = 0; i < config.server_url_count; i++) {
+    fprintf(f, "%s\n", config.server_url[i]);
+  }
+
+  fflush(f);
+  flock(fd, LOCK_UN);
+  fclose(f);
+  rename(ENDPOINTS_PATH ".tmp", ENDPOINTS_PATH);
+
+  last_endpoint = 0;
+  log_msg("Reordered endpoints: %s promoted to top", tmp_url);
+}
+
+void load_config_from_file() {
+  // Set defaults first
+  config.server_url_count = 1;
+  strcpy(config.server_url[0], DEFAULT_SERVER_URL);
+  strcpy(config.api_key, DEFAULT_API_KEY);
+  config.upload_interval_seconds = DEFAULT_INTERVAL;
+  config.max_retries = DEFAULT_MAX_RETRIES;
+  config.retry_delay_seconds = DEFAULT_RETRY_DELAY;
+  config.timeout_seconds = DEFAULT_TIMEOUT;
+  config.whitelist_count = 0;
+
+  // Load from three separate files
+  load_config_settings();
+  load_config_endpoints();
+  load_config_whitelist();
+
+  log_msg("Config loaded: %d endpoints, %d whitelisted docs",
+          config.server_url_count, config.whitelist_count);
 }
 
 /**
@@ -210,15 +341,26 @@ int upload_file(const char *doc_id, const char *page_uuid, const char *page_num,
 
   int attempts = 0;
   while (attempts < config.server_url_count) {
-    log_msg("Attempting upload to %s", config.server_url[current_endpoint]);
-    result = http_post_file(config.server_url[current_endpoint], config.api_key,
+    // Append /upload to the base URL at request time
+    char upload_url[300];
+    snprintf(upload_url, sizeof(upload_url), "%s/upload",
+             config.server_url[current_endpoint]);
+
+    log_msg("Attempting upload to %s", upload_url);
+    result = http_post_file(upload_url, config.api_key,
                             file_path, full_virtual_path, doc_id, &response);
 
     if (result == 0 &&
         (response.status_code == 200 || response.status_code == 201)) {
       log_msg("Upload successful on endpoint %d", current_endpoint);
-      last_endpoint = current_endpoint; // Remember successful endpoint
       http_response_free(&response);
+
+      // Promote successful endpoint to the top (priority queue)
+      if (current_endpoint != 0) {
+        reorder_endpoints(current_endpoint);
+      } else {
+        last_endpoint = 0;
+      }
       return 0;
     }
 

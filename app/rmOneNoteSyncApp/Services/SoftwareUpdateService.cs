@@ -8,7 +8,7 @@ namespace rmOneNoteSyncApp.Services;
 
 public class SoftwareUpdateService : ISoftwareUpdateService
 {
-    private const string RepoApiUrl = "https://api.github.com/repos/Excustic/rmOneNoteSync/releases/latest";
+    public const string RepoApiUrl = "https://api.github.com/repos/Excustic/rmOneNoteSync/releases/latest";
     private readonly HttpClient _httpClient;
 
     public SoftwareUpdateService()

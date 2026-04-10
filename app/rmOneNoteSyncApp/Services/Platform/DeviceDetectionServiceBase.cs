@@ -31,6 +31,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
     protected const string REMARKABLE_USB_IP = AppSettings.DefaultDeviceIp;
 
     public event EventHandler<DeviceConnectionEventArgs>? DeviceConnectionChanged;
+    public event EventHandler<string>? IpAddressUpdated;
     private bool _isConnected;
     public bool IsConnected => _currentDevice != null && _isConnected;
     public bool IncludeSSHConnectionCheck { get; set; } = true;
@@ -51,8 +52,9 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
             config.LastNetworkIp = ipString;
             await _databaseService.SaveConfigurationAsync(config);
             _requiresManualScan = false;
-            await CheckConnectionAsync();
-            return true;
+            IpAddressUpdated?.Invoke(this, ipString);
+            var res = await CheckConnectionAsync();
+            return res;
         }
 
         _logger.LogWarning("Manual scan failed to find the device.");
@@ -68,10 +70,12 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
 
         // Start polling timer - check every 5 seconds (less aggressive now since we have NetworkAddressChanged)
         var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
-        while (await timer.WaitForNextTickAsync() && _isMonitoring)
+        do
         {
             await CheckConnectionAsync();
         }
+        while (await timer.WaitForNextTickAsync() && _isMonitoring);
+
 
         _logger.LogDebug("Started device monitoring");
     }
@@ -116,8 +120,8 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
                     var deviceInfo = new Dictionary<string, string>();
                     if (IncludeSSHConnectionCheck)
                     {
-                        if ((!_sshService.IsConnected || _sshService.CurrentIp != REMARKABLE_USB_IP) && config?.DevicePassword != null)
-                            await _sshService.ConnectAsync(REMARKABLE_USB_IP, config?.DevicePassword);
+                        if ((!_sshService.IsConnected || _sshService.CurrentIp != REMARKABLE_USB_IP) && config is { DevicePassword: not "" })
+                            await _sshService.ConnectAsync(REMARKABLE_USB_IP, config?.DevicePassword ?? "");
                         deviceInfo = await _sshService.GetDeviceInfoAsync();
                     }
                     // New USB connection
@@ -136,6 +140,8 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
 
                     // USB does not automatically trigger ARP. Manual scan available instead.
                 }
+                else if ((!_sshService.IsConnected || _sshService.CurrentIp != REMARKABLE_USB_IP) && config is { DevicePassword: not "" })
+                    await _sshService.ConnectAsync(REMARKABLE_USB_IP, config?.DevicePassword ?? "");
                 _requiresManualScan = false;
             }
 
@@ -160,6 +166,7 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
                         DeviceSerial = deviceInfo.TryGetValue("Serial", out var serial) ? serial : "Unknown",
                         SyncVersion = deviceInfo.TryGetValue("SyncVersion", out var syncVersion) ? syncVersion : "Unknown"
                     };
+                    IpAddressUpdated?.Invoke(this, targetIp);
                 }
             }
             else
@@ -246,6 +253,13 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
                 if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
                 {
                     var ipStr = ip.ToString();
+
+                    // Skip loopback addresses
+                    if (IPAddress.IsLoopback(ip) || ipStr.StartsWith("127."))
+                    {
+                        continue;
+                    }
+
                     if (ipStr.StartsWith(prefix))
                     {
                         return ipStr;
@@ -253,10 +267,9 @@ public abstract class DeviceDetectionServiceBase(ILogger logger, IDatabaseServic
                 }
             }
 
-            // Fallback: just return the first IPv4 address
-            return host.AddressList
-                .FirstOrDefault(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)?
-                .ToString();
+            // If we didn't find a prefix match, don't just return any random IP (like 127.0.1.1)
+            // returning null allows the caller to handle the failure or try a different approach.
+            return null;
         }
         catch (Exception ex)
         {

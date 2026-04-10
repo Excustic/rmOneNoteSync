@@ -22,6 +22,7 @@ public partial class MainViewModel : ViewModelBase
     private readonly ISyncService _syncService;
     private readonly ILogger<MainViewModel> _logger;
     private readonly IOneNoteAuthService _oneNoteAuth;
+    private readonly IConfigurationProviderService _configProvider;
     private SyncConfiguration? _configuration;
     private string _fetchedMacAddress = string.Empty;
 
@@ -128,6 +129,7 @@ public partial class MainViewModel : ViewModelBase
         IOneNoteAuthService oneNoteAuth,
         ISyncService syncService,
         ISoftwareUpdateService updateService,
+        IConfigurationProviderService configProvider,
         ILogger<MainViewModel> logger)
     {
         _detectionService = detectionService;
@@ -136,6 +138,7 @@ public partial class MainViewModel : ViewModelBase
         _databaseService = databaseService;
         _syncService = syncService;
         _updateService = updateService;
+        _configProvider = configProvider;
         _logger = logger;
 
         // Initialize with Dashboard view model
@@ -174,6 +177,10 @@ public partial class MainViewModel : ViewModelBase
         Task.Run(async () =>
         {
             var config = await _databaseService.GetConfigurationAsync();
+            
+            // Recover any items that were left InProgress (e.g. app crashed)
+            await _syncService.RecoverInProgressItemsAsync();
+
             ShowSetupScreen = config is null or { DevicePassword: "" };
             _detectionService.IncludeSSHConnectionCheck = !ShowSetupScreen;
             await _detectionService.StartMonitoringAsync();
@@ -184,6 +191,8 @@ public partial class MainViewModel : ViewModelBase
                     _logger.LogDebug("Initializing Automatic Sync (Interval: {Interval}s)", config.SyncIntervalSeconds);
                     _ = _syncService.StartAutomaticSyncAsync(config.SyncIntervalSeconds);
                 }
+
+                // _detectionService?.CheckConnectionAsync();
 
                 // Make sure we're on the main thread for UI updates
                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
@@ -196,6 +205,7 @@ public partial class MainViewModel : ViewModelBase
 
         // Subscribe to device connection events
         _detectionService.DeviceConnectionChanged += OnConnectionChanged;
+        _detectionService.IpAddressUpdated += OnIpAddressUpdated;
         _deploymentService.DeploymentProgress += OnDeploymentProgress;
 
         _oneNoteAuth = oneNoteAuth;
@@ -253,17 +263,6 @@ public partial class MainViewModel : ViewModelBase
                         ConnectionState = ConnectionState.Configured;
                         IsConnected = true;
                     });
-
-                    // If connected via WiFi, inject the host IP into the device
-                    if (device.ConnectionType == DeviceConnectionType.WiFi)
-                    {
-                        var localIp = await _detectionService.GetLocalIpAddressForDevice(device.IpAddress);
-                        if (!string.IsNullOrEmpty(localIp))
-                        {
-                            _logger?.LogDebug("Injecting local IP {LocalIP} as fallback to device", localIp);
-                            await _sshService.UpdateServerUrlFallbackAsync(localIp);
-                        }
-                    }
                 }
             }
         }
@@ -338,6 +337,13 @@ public partial class MainViewModel : ViewModelBase
             OnPropertyChanged(nameof(CanConnect));
         });
     }
+
+    private async void OnIpAddressUpdated(object? sender, string newIp)
+    {
+        _logger?.LogDebug("Device IP updated to {IP}. Synchronizing endpoints...", newIp);
+        await _configProvider.RegisterEndpointAsync();
+    }
+
     [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task DeployServiceAsync()
     {
@@ -427,6 +433,11 @@ public partial class MainViewModel : ViewModelBase
 
                 // Enable Wi-Fi
                 var EnableWifi = await _sshService.EnableWifiOverSshAsync();
+                string wifiIp = string.Empty;
+                if (EnableWifi)
+                {
+                    wifiIp = await _sshService.GetWifiIpAsync() ?? string.Empty;
+                }
 
                 // Fetch MAC address
                 _fetchedMacAddress = await _sshService.GetMacAddressAsync() ?? "Unknown";
@@ -440,15 +451,33 @@ public partial class MainViewModel : ViewModelBase
                     .InformationalVersion?.Split('+')[0] ?? "0.0.0";
 
                 // Save configuration
-                var config = new SyncConfiguration
+                var config = await _databaseService.GetConfigurationAsync() ?? new SyncConfiguration();
+                
+                config.DeviceIp = CurrentDevice?.IpAddress ?? AppSettings.DefaultDeviceIp;
+                config.DevicePassword = this.DevicePassword;
+                config.DeviceMacAddress = _fetchedMacAddress;
+                config.EnableWifiSync = EnableWifi;
+                config.LastNetworkIp = wifiIp;
+                config.AutoSync = true;
+                
+                // Fetch latest whitelist from device (Source of Truth)
+                var (deviceWhitelist, deviceFolders) = await _configProvider.FetchWhitelistFromDeviceAsync();
+                if (deviceWhitelist.Count > 0 || deviceFolders.Count > 0)
                 {
-                    DeviceIp = CurrentDevice?.IpAddress ?? AppSettings.DefaultDeviceIp,
-                    DevicePassword = this.DevicePassword,
-                    DeviceMacAddress = _fetchedMacAddress,
-                    EnableWifiSync = EnableWifi,
-                    AutoSync = true
-                };
+                    _logger.LogInformation("Importing whitelist from device: {FileCount} files, {FolderCount} folders", deviceWhitelist.Count, deviceFolders.Count);
+                    config.SyncFiles = deviceWhitelist;
+                    config.SyncFolders = deviceFolders;
+                }
+                
                 await _databaseService.SaveConfigurationAsync(config);
+                
+                // Refresh dashboard to show imported selection
+                var dashboardVm = App.ServiceProvider?.GetService<DashboardViewModel>();
+                if (dashboardVm != null)
+                {
+                    _ = Task.Run(dashboardVm.LoadDashboardDataAsync);
+                }
+
                 var deviceInfo = await _sshService.GetDeviceInfoAsync();
                 DeviceInfo dev = new()
                 {
@@ -474,6 +503,8 @@ public partial class MainViewModel : ViewModelBase
                     await _deploymentService.UpdateAsync(dev);
                     await _sshService.RestartServiceAsync();
 
+                    // Finalize configuration by pushing endpoints via HTTP
+                    await _configProvider.RegisterEndpointAsync();
                 }
                 else
                 {
@@ -486,6 +517,9 @@ public partial class MainViewModel : ViewModelBase
 
                     if (OneNoteStatusText.Contains("Signed in as"))
                     {
+                        // Ensure endpoints are registered if everything else is fine
+                        await _configProvider.RegisterEndpointAsync();
+
                         OnPropertyChanged(nameof(CanCompleteSetup));
                         CompleteSetupCommand.NotifyCanExecuteChanged();
                     }

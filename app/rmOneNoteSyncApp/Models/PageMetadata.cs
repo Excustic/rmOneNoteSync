@@ -39,12 +39,16 @@ public class PageMetadata
 
 public enum SyncStatus
 {
-    Pending,
-    InProgress,
-    Uploaded,
-    Failed,
-    Skipped,
-    Deleted
+    Pending = 0,
+    Queued = 1,
+    Transcoding = 2,
+    Uploading = 3,
+    Indexing = 4,
+    Uploaded = 5,
+    Failed = 6,
+    Skipped = 7,
+    Deleted = 8,
+    InProgress = 99 // Keeping for backwards compatibility during migration
 }
 
 public class DocumentMetadata

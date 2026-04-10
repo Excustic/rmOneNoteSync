@@ -23,6 +23,7 @@ public interface IDatabaseService
     Task<List<PageMetadata>> GetPagesByStatusAsync(SyncStatus status);
     Task SavePageMetadataAsync(PageMetadata metadata);
     Task UpdatePageStatusAsync(string documentId, string pageId, SyncStatus status, string? error = null, string? oneNoteUrl = null);
+    Task ResetInProgressStatusAsync();
 
     // Document metadata management
     Task<DocumentMetadata?> GetDocumentMetadataAsync(string documentId);
@@ -34,6 +35,7 @@ public interface IDatabaseService
     Task<long> GetCacheSizeAsync();
     Task<int> CleanupOldCacheAsync(int daysToKeep);
     Task ClearCacheAsync();
+    Task NukeDatabaseAsync();
 
     // Sync history
     Task RecordSyncEventAsync(string documentId, string pageId, bool success, string? details = null);

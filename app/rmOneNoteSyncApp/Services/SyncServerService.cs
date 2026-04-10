@@ -154,9 +154,6 @@ public class SyncServerService : ISyncServerService
             // Route the request
             switch (request.Url?.AbsolutePath)
             {
-                case "/config":
-                    await HandleConfigRequest(request, response);
-                    break;
 
                 case "/upload":
                     await HandleUploadRequest(request, response);
@@ -187,33 +184,6 @@ public class SyncServerService : ISyncServerService
         {
             context.Response.Close();
         }
-    }
-
-    private async Task HandleConfigRequest(HttpListenerRequest request, HttpListenerResponse response)
-    {
-        // Extract device ID from query string
-        var deviceId = request.QueryString["device_id"] ?? "unknown";
-        var userAgent = request.UserAgent;
-
-        _logger.LogDebug("Config request from device: {DeviceId} using {UserAgent}", deviceId, userAgent ?? "Unknown");
-
-        if (string.IsNullOrEmpty(userAgent) || !userAgent.Contains("RemarkableSyncClient/1.2"))
-        {
-            _logger.LogWarning("Rejecting config request from incompatible client: {UserAgent}", userAgent ?? "Unknown");
-            response.StatusCode = 426; // Upgrade Required
-            await WriteJsonResponse(response, new { error = "Client protocol mismatch. Expected RemarkableSyncClient/1.2, please update your reMarkable client." });
-            return;
-        }
-
-        // Get configuration JSON
-        var configJson = await _configProvider.GetConfigurationJsonAsync(deviceId);
-
-        // Send response
-        response.ContentType = "application/json";
-        response.StatusCode = 200;
-
-        var buffer = Encoding.UTF8.GetBytes(configJson);
-        await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
     }
 
     private async Task HandleUploadRequest(HttpListenerRequest request, HttpListenerResponse response)
@@ -304,7 +274,7 @@ public class SyncServerService : ISyncServerService
         var saveDir = Path.Combine(_uploadDirectory, documentId);
         Directory.CreateDirectory(saveDir);
 
-        var localPath = Path.Combine(saveDir, $"{pageId}_{timestamp}.rm");
+        var localPath = Path.Combine(saveDir, $"{pageId}.rm");
 
         // Save file
         using (var fileStream = File.Create(localPath))
@@ -353,8 +323,8 @@ public class SyncServerService : ISyncServerService
 
         await _databaseService.SavePageMetadataAsync(metadata);
 
-        // Raise event
-        FileReceived?.Invoke(this, new FileReceivedEventArgs
+        // Raise event asynchronously to ensure the HTTP response is never blocked by sync logic
+        var eventArgs = new FileReceivedEventArgs
         {
             DocumentId = documentId,
             PageId = pageId,
@@ -362,7 +332,8 @@ public class SyncServerService : ISyncServerService
             LocalPath = localPath,
             FileSize = fileInfo.Length,
             ReceivedAt = DateTime.UtcNow
-        });
+        };
+        _ = Task.Run(() => FileReceived?.Invoke(this, eventArgs));
 
         // Send success response
         response.StatusCode = 200;

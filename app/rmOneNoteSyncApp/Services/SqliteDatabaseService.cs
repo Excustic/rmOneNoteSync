@@ -111,10 +111,46 @@ public class SqliteDatabaseService : IDatabaseService
             CREATE INDEX IF NOT EXISTS idx_pages_lastsync ON Pages(LastSyncTime);
             CREATE INDEX IF NOT EXISTS idx_synchistory_timestamp ON SyncHistory(Timestamp);";
         
-        using var connection = new SqliteConnection(ConnectionString);
-        connection.Open();
-        connection.Execute("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
-        connection.Execute(createTablesSql);
+        try
+        {
+            using var connection = new SqliteConnection(ConnectionString);
+            connection.Open();
+            connection.Execute("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+            connection.Execute(createTablesSql);
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 10) // SQLITE_IOERR
+        {
+            _logger.LogWarning("Detected SQLite Disk I/O error during initialization. Attempting to clean ghost WAL files.");
+            DeleteGhostWalFiles();
+            
+            // Retry once
+            using var connection = new SqliteConnection(ConnectionString);
+            connection.Open();
+            connection.Execute("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+            connection.Execute(createTablesSql);
+        }
+    }
+
+    private void DeleteGhostWalFiles()
+    {
+        if (string.IsNullOrEmpty(_databasePath)) return;
+
+        var ghostFiles = new[] { _databasePath + "-wal", _databasePath + "-shm" };
+        foreach (var file in ghostFiles)
+        {
+            if (File.Exists(file))
+            {
+                try
+                {
+                    File.Delete(file);
+                    _logger.LogDebug("Force deleted ghost file: {File}", file);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to force delete ghost file: {File}", file);
+                }
+            }
+        }
     }
 
     private async Task CreateTablesAsync()
@@ -176,10 +212,24 @@ public class SqliteDatabaseService : IDatabaseService
             CREATE INDEX IF NOT EXISTS idx_pages_status ON Pages(Status);
             CREATE INDEX IF NOT EXISTS idx_pages_lastsync ON Pages(LastSyncTime);
             CREATE INDEX IF NOT EXISTS idx_synchistory_timestamp ON SyncHistory(Timestamp);";
-        using var connection = new SqliteConnection(ConnectionString);
-        await connection.OpenAsync();
-        await connection.ExecuteAsync("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
-        await connection.ExecuteAsync(createTablesSql);
+        try
+        {
+            using var connection = new SqliteConnection(ConnectionString);
+            await connection.OpenAsync();
+            await connection.ExecuteAsync("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+            await connection.ExecuteAsync(createTablesSql);
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 10) // SQLITE_IOERR
+        {
+            _logger.LogWarning("Detected SQLite Disk I/O error during async initialization. Attempting to clean ghost WAL files.");
+            DeleteGhostWalFiles();
+
+            // Retry once
+            using var connection = new SqliteConnection(ConnectionString);
+            await connection.OpenAsync();
+            await connection.ExecuteAsync("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+            await connection.ExecuteAsync(createTablesSql);
+        }
     }
 
     public async Task<SyncConfiguration?> GetConfigurationAsync()
@@ -523,6 +573,67 @@ public class SqliteDatabaseService : IDatabaseService
                 Directory.CreateDirectory(cacheDir);
             }
         }
+    }
+
+    public async Task NukeDatabaseAsync()
+    {
+        _logger.LogWarning("Nuking entire database file at {Path}", _databasePath);
+
+        SqliteConnection.ClearAllPools();
+        // Give the OS a moment to release handles after clearing pools
+        await Task.Delay(100);
+        
+        if (!string.IsNullOrEmpty(_databasePath))
+        {
+            var filesToDelete = new[]
+            {
+                _databasePath,
+                _databasePath + "-wal",
+                _databasePath + "-shm"
+            };
+
+            foreach (var file in filesToDelete)
+            {
+                if (File.Exists(file))
+                {
+                    try
+                    {
+                        File.Delete(file);
+                        _logger.LogDebug("Deleted database component: {File}", file);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to delete database component: {File}", file);
+                    }
+                }
+            }
+
+            try
+            {
+                await InitializeAsync(_databasePath);
+                _logger.LogInformation("Database successfully nuked and rebuilt.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to re-initialize database after nuke.");
+            }
+        }
+    }
+
+    public async Task ResetInProgressStatusAsync()
+    {
+        var sql = "UPDATE Pages SET Status = @PendingStatus WHERE Status IN (@Queued, @Transcoding, @Uploading, @Indexing, @InProgress)";
+        using var connection = new SqliteConnection(ConnectionString);
+        await connection.ExecuteAsync(sql, new
+        {
+            PendingStatus = (int)SyncStatus.Pending,
+            Queued = (int)SyncStatus.Queued,
+            Transcoding = (int)SyncStatus.Transcoding,
+            Uploading = (int)SyncStatus.Uploading,
+            Indexing = (int)SyncStatus.Indexing,
+            InProgress = (int)SyncStatus.InProgress
+        });
+        _logger.LogInformation("Reset all transient sync items back to 'Pending' for session recovery.");
     }
 
     public async Task RecordSyncEventAsync(string documentId, string pageId, bool success, string? details = null)

@@ -25,7 +25,7 @@ public partial class SettingsViewModel : ViewModelBase
     private readonly IConfigurationProviderService _configProvider;
     private readonly ILogger<SettingsViewModel>? _logger;
 
-    private SyncConfiguration? _configuration;
+    private SyncConfiguration _configuration;
 
     [ObservableProperty]
     private bool _enableWifiSync;
@@ -251,6 +251,9 @@ public partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task SaveSettingsAsync()
     {
+        // Always fetch the freshest config from DB before updating, in case it was updated via a device import
+        _configuration = await _databaseService.GetConfigurationAsync() ?? new SyncConfiguration();
+
         _configuration.EnableWifiSync = EnableWifiSync;
         _configuration.SyncIntervalSeconds = SyncIntervalSeconds;
         _configuration.SyncServerPort = SyncServerPort;
@@ -331,6 +334,8 @@ public partial class SettingsViewModel : ViewModelBase
             AutoSync = true;
             EnableWifiSync = true;
 
+            _configuration ??= await _databaseService.GetConfigurationAsync() ?? new SyncConfiguration();
+
             if (_configuration != null)
             {
                 _configuration.MaxRetries = MaxRetries;
@@ -373,7 +378,7 @@ public partial class SettingsViewModel : ViewModelBase
             // 3. Set up your dialog
             var dialog = new ConfirmDialogWindow();
             var message = """
-            Are you sure you want to disconnect? All data on the device will be erased.
+            Are you sure you want to disconnect? The application data on the pc and device will be erased.
             Otherwise, please disconnect it first to retain local data.
             """;
             var vm = new ConfirmDialogViewModel(dialog, message);
@@ -390,18 +395,8 @@ public partial class SettingsViewModel : ViewModelBase
                 _logger?.LogInformation("Disconnecting device and resetting configuration");
 
 
-                // Clear the configuration to force setup screen
-                await _databaseService.ClearCacheAsync();
-
-                // Clear saved configuration
-                var config = await _databaseService.GetConfigurationAsync();
-                if (config != null)
-                {
-                    config.DeviceIp = string.Empty;
-                    config.DevicePassword = string.Empty;
-                    config.ServiceVersion = string.Empty;
-                    await _databaseService.SaveConfigurationAsync(config);
-                }
+                // Completely erase the database file and recreate
+                await _databaseService.NukeDatabaseAsync();
 
                 // Nuke the device
                 try

@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using rmOneNoteSyncApp.Models;
@@ -19,11 +20,11 @@ public class SyncService : ISyncService
     private readonly IRmConverterService _converterService;
     private readonly IOneNoteClient _oneNoteClient;
     private readonly ISyncServerService _syncServer;
-    private readonly Timer? _autoSyncTimer;
     private bool _isSyncing;
     private CancellationTokenSource? _autoSyncCancellation;
     private readonly ConcurrentDictionary<string, byte> _cancelledItems = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _itemCts = new();
+    private static readonly SemaphoreSlim _graphApiSemaphore = new(5, 5); // Microsoft GraphAPI limit for concurrent requests for personal accounts
 
     public event EventHandler<SyncProgressEventArgs>? SyncProgress;
     public event EventHandler<PageSyncCompletedEventArgs>? PageSyncCompleted;
@@ -31,6 +32,9 @@ public class SyncService : ISyncService
 
     public bool IsSyncing => _isSyncing;
     public DateTime? LastSyncTime { get; private set; }
+
+    private readonly Channel<bool> _syncChannel = Channel.CreateBounded<bool>(
+        new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest });
 
     public SyncService(
         ILogger<SyncService> logger,
@@ -45,14 +49,48 @@ public class SyncService : ISyncService
         _oneNoteClient = oneNoteClient;
         _syncServer = syncServer;
 
-        // Listen to background file drops and immediately start syncing
-        _syncServer.FileReceived += async (s, e) =>
+        // Start the sequential sync consumer
+        _ = Task.Run(async () => await ProcessSyncQueueAsync(_autoSyncCancellation?.Token ?? CancellationToken.None));
+
+        // Nudge the channel when a new file arrives
+        _syncServer.FileReceived += (s, e) =>
         {
-            if (!_isSyncing)
-            {
-                await Task.Run(() => SyncAllAsync());
-            }
+            _logger.LogDebug("New file received: {Id}. Nudging sync queue.", e.PageId);
+            TriggerSync();
         };
+    }
+
+    private async Task ProcessSyncQueueAsync(CancellationToken token)
+    {
+        _logger.LogInformation("Sync Queue Consumer started.");
+
+        while (await _syncChannel.Reader.WaitToReadAsync(token))
+        {
+            if (_syncChannel.Reader.TryRead(out _)) // Queue is bounded to 1, so we only need to check if there's anything in it
+            {
+                try
+                {
+                    _logger.LogDebug("Processing sync request from queue...");
+                    await SyncAllAsync(token);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Error during background sync execution from queue.");
+                }
+            }
+        }
+    }
+
+    public void TriggerSync()
+    {
+        _syncChannel.Writer.TryWrite(true);
+        _logger.LogDebug("Manual sync trigger written to channel.");
+    }
+
+    public async Task RecoverInProgressItemsAsync()
+    {
+        _logger.LogInformation("Starting session recovery...");
+        await _databaseService.ResetInProgressStatusAsync();
     }
 
     public async Task<SyncResult> SyncAllAsync(CancellationToken cancellationToken = default)
@@ -68,7 +106,7 @@ public class SyncService : ISyncService
 
         try
         {
-            ReportProgress("Starting sync...", 0, 0);
+            ReportProgress("Starting sync...", 0, 0, SyncStatus.Pending);
 
             // Get all pending pages
             var pendingPages = await _databaseService.GetPendingPagesAsync(1000);
@@ -81,7 +119,7 @@ public class SyncService : ISyncService
                 return result;
             }
 
-            ReportProgress($"Found {pendingPages.Count} pages to sync", pendingPages.Count, 0);
+            ReportProgress($"Found {pendingPages.Count} pages to sync", pendingPages.Count, 0, SyncStatus.Pending);
 
             var config = await _databaseService.GetConfigurationAsync();
             var whitelist = config?.SyncFiles ?? new List<string>();
@@ -93,6 +131,35 @@ public class SyncService : ISyncService
             var errors = new ConcurrentBag<string>();
 
             _logger.LogDebug("Starting parallel sync with MaxThreads={MaxThreads} for {Count} pages", maxThreads, pendingPages.Count);
+
+            // Per-sync cache for Notebooks and Sections to avoid redundant Graph calls
+            var notebookCache = new ConcurrentDictionary<string, Notebook>();
+            var sectionCache = new ConcurrentDictionary<string, Section>(); // Key: notebookId|sectionName
+
+            // Keyed locks to prevent race conditions during notebook/section creation
+            var notebookLocks = new ConcurrentDictionary<string, SemaphoreSlim>();
+            var sectionLocks = new ConcurrentDictionary<string, SemaphoreSlim>();
+
+            // Fetch initial hierarchy once to pre-populate cache using $expand=sections
+            try
+            {
+                var initialNotebooks = await _oneNoteClient.GetNotebooksAsync();
+                foreach (var nb in initialNotebooks)
+                {
+                    if (nb.DisplayName != null) notebookCache[nb.DisplayName] = nb;
+                    if (nb.Sections != null)
+                    {
+                        foreach (var sec in nb.Sections)
+                        {
+                            sectionCache[$"{nb.Id}|{sec.DisplayName}"] = sec;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to pre-populate OneNote hierarchy cache. Sync will continue with on-demand lookups.");
+            }
 
             await Parallel.ForEachAsync(pendingPages, new ParallelOptions
             {
@@ -113,7 +180,8 @@ public class SyncService : ISyncService
                 // Enforce whitelist
                 if (!whitelist.Contains(page.DocumentId))
                 {
-                    _logger.LogWarning("Skipping upload for {Page} (Doc: {Doc}) — not in whitelist", page.Title, page.DocumentId);
+                    _logger.LogWarning("Skipping upload for {Page} (Doc ID: {DocId}) — not in current whitelist (Whitelist count: {Count})",
+                        page.Title, page.DocumentId, whitelist.Count);
                     await _databaseService.UpdatePageStatusAsync(page.DocumentId, page.PageId, SyncStatus.Skipped);
                     Interlocked.Increment(ref processed);
                     return;
@@ -126,10 +194,13 @@ public class SyncService : ISyncService
 
                 try
                 {
+                    await _databaseService.UpdatePageStatusAsync(page.DocumentId, page.PageId, SyncStatus.Queued);
+
                     var total = pendingPages.Count;
                     var current = Interlocked.CompareExchange(ref processed, 0, 0); // read without modifying
 
-                    ReportProgress($"Converting notes...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 1, 8);
+                    ReportProgress($"Converting notes...", total, current, SyncStatus.Transcoding, page.VirtualPath, page.DocumentId, page.PageId, 1, 8);
+                    await _databaseService.UpdatePageStatusAsync(page.DocumentId, page.PageId, SyncStatus.Transcoding);
 
                     if (!File.Exists(page.LocalFilePath))
                     {
@@ -152,24 +223,62 @@ public class SyncService : ISyncService
                     if (section.Length > 49) section = section.Substring(0, 49);
 
                     // Ensure notebook exists
-                    ReportProgress($"Fetching Notebook...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 2, 8);
+                    ReportProgress($"Fetching Notebook...", total, current, SyncStatus.InProgress, page.VirtualPath, page.DocumentId, page.PageId, 2, 8);
 
-                    var notebooks = await _oneNoteClient.GetNotebooksAsync();
-                    var targetNotebook = notebooks.FirstOrDefault(n => n.DisplayName == notebook);
-                    if (targetNotebook == null)
+                    if (!notebookCache.TryGetValue(notebook, out var targetNotebook))
                     {
-                        targetNotebook = await _oneNoteClient.CreateNotebookAsync(notebook);
+                        var nbLock = notebookLocks.GetOrAdd(notebook, _ => new SemaphoreSlim(1, 1));
+                        await nbLock.WaitAsync(itemToken);
+                        try
+                        {
+                            // Double-check cache inside the lock
+                            if (!notebookCache.TryGetValue(notebook, out targetNotebook))
+                            {
+                                var notebooks = await _oneNoteClient.GetNotebooksAsync();
+                                targetNotebook = notebooks.FirstOrDefault(n => n.DisplayName == notebook);
+                                if (targetNotebook == null)
+                                {
+                                    _logger.LogInformation("Creating new OneNote notebook: {Notebook}", notebook);
+                                    targetNotebook = await _oneNoteClient.CreateNotebookAsync(notebook);
+                                }
+                                notebookCache[notebook] = targetNotebook;
+                            }
+                        }
+                        finally
+                        {
+                            nbLock.Release();
+                        }
                     }
 
                     itemToken.ThrowIfCancellationRequested();
 
-                    // Ensure section exists
-                    ReportProgress($"Fetching Section...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 3, 8);
-                    var sections = await _oneNoteClient.GetSectionsAsync(targetNotebook.Id!);
-                    var targetSection = sections.FirstOrDefault(s => s.DisplayName == section);
-                    if (targetSection == null)
+                    // Ensure section exists (Keyed by notebookId and section name)
+                    ReportProgress($"Fetching Section...", total, current, SyncStatus.InProgress, page.VirtualPath, page.DocumentId, page.PageId, 3, 8);
+                    string sectionKey = $"{targetNotebook.Id}|{section}";
+
+                    if (!sectionCache.TryGetValue(sectionKey, out var targetSection))
                     {
-                        targetSection = await _oneNoteClient.CreateSectionAsync(targetNotebook.Id!, section);
+                        var secLock = sectionLocks.GetOrAdd(sectionKey, _ => new SemaphoreSlim(1, 1));
+                        await secLock.WaitAsync(itemToken);
+                        try
+                        {
+                            // Double-check cache inside the lock
+                            if (!sectionCache.TryGetValue(sectionKey, out targetSection))
+                            {
+                                var sections = await _oneNoteClient.GetSectionsAsync(targetNotebook.Id!);
+                                targetSection = sections.FirstOrDefault(s => s.DisplayName == section);
+                                if (targetSection == null)
+                                {
+                                    _logger.LogInformation("Creating new OneNote section: {Section} in Notebook: {Notebook}", section, notebook);
+                                    targetSection = await _oneNoteClient.CreateSectionAsync(targetNotebook.Id!, section);
+                                }
+                                sectionCache[sectionKey] = targetSection;
+                            }
+                        }
+                        finally
+                        {
+                            secLock.Release();
+                        }
                     }
 
                     // Save the Notebook link back to DocumentMetadata CustomMetadata
@@ -188,20 +297,20 @@ public class SyncService : ISyncService
                     itemToken.ThrowIfCancellationRequested();
 
                     // Check for existing page with same title to prevent duplication
-                    ReportProgress($"Checking records...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 4, 8);
+                    ReportProgress($"Checking records...", total, current, SyncStatus.InProgress, page.VirtualPath, page.DocumentId, page.PageId, 4, 8);
 
                     var existingPages = await _oneNoteClient.GetPagesAsync(targetSection.Id!);
                     var existingPage = existingPages.FirstOrDefault(p => p.Title == pageName);
                     if (existingPage != null)
                     {
-                        ReportProgress($"Overwriting duplicate...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 5, 8);
+                        ReportProgress($"Overwriting duplicate...", total, current, SyncStatus.InProgress, page.VirtualPath, page.DocumentId, page.PageId, 5, 8);
                         _logger.LogDebug("Deleting existing OneNote page {Page} before upload to prevent duplication", pageName);
                         await _oneNoteClient.DeletePageAsync(existingPage.Id!);
                     }
 
                     itemToken.ThrowIfCancellationRequested();
 
-                    ReportProgress($"Preparing payload...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 6, 8);
+                    ReportProgress($"Preparing payload...", total, current, SyncStatus.InProgress, page.VirtualPath, page.DocumentId, page.PageId, 6, 8);
                     // 3. Read transcoded files
                     byte[] inkmlData = await File.ReadAllBytesAsync(convResult.InkMLPath, itemToken);
                     byte[] htmlData = await File.ReadAllBytesAsync(convResult.HtmlPath, itemToken);
@@ -215,26 +324,53 @@ public class SyncService : ISyncService
                     };
 
                     // 4. Upload Multipart payload
-                    ReportProgress($"Uploading page...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 7, 8);
-                    var pageId = await _oneNoteClient.UploadInkMLPageAsync(
-                        targetSection.Id!,
-                        pageName,
-                        inkmlData,
-                        htmlData,
-                        metadata);
+                    ReportProgress($"Uploading page...", total, current, SyncStatus.Uploading, page.VirtualPath, page.DocumentId, page.PageId, 7, 8);
+                    await _databaseService.UpdatePageStatusAsync(page.DocumentId, page.PageId, SyncStatus.Uploading);
+
+                    string pageId;
+                    await _graphApiSemaphore.WaitAsync(itemToken);
+                    try
+                    {
+                        pageId = await _oneNoteClient.UploadInkMLPageAsync(
+                            targetSection.Id!,
+                            pageName,
+                            inkmlData,
+                            htmlData,
+                            metadata);
+                    }
+                    finally
+                    {
+                        _graphApiSemaphore.Release();
+                    }
 
                     itemToken.ThrowIfCancellationRequested();
 
-                    ReportProgress($"Completing sync...", total, current, page.VirtualPath, page.DocumentId, page.PageId, 8, 8);
+                    ReportProgress($"Completing sync...", total, current, SyncStatus.Indexing, page.VirtualPath, page.DocumentId, page.PageId, 8, 8);
+                    await _databaseService.UpdatePageStatusAsync(page.DocumentId, page.PageId, SyncStatus.Indexing);
+
                     string? oneNoteUrl = null;
                     try
                     {
-                        var createdPage = await _oneNoteClient.GetPageAsync(pageId);
-                        oneNoteUrl = createdPage?.Links?.OneNoteWebUrl?.Href ?? createdPage?.Links?.OneNoteClientUrl?.Href;
+                        await _graphApiSemaphore.WaitAsync(itemToken);
+                        try
+                        {
+                            var createdPage = await _oneNoteClient.GetPageAsync(pageId);
+                            oneNoteUrl = createdPage?.Links?.OneNoteWebUrl?.Href ?? createdPage?.Links?.OneNoteClientUrl?.Href;
+                        }
+                        finally
+                        {
+                            _graphApiSemaphore.Release();
+                        }
+                        
+                        if (string.IsNullOrEmpty(oneNoteUrl))
+                        {
+                            throw new Exception("Graph API returned the page, but no valid OneNote URL was attached. Indexing might still be incomplete.");
+                        }
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Failed to retrieve OneNote URL for uploaded page {PageId}", pageId);
+                        throw new Exception($"Graph API indexing timeout: {ex.Message}");
                     }
 
                     await _databaseService.UpdatePageStatusAsync(
@@ -344,9 +480,18 @@ public class SyncService : ISyncService
 
     public async Task StartAutomaticSyncAsync(int intervalSeconds)
     {
-        _autoSyncCancellation = new CancellationTokenSource();
+        // Cancel existing loop before starting a new one
+        if (_autoSyncCancellation != null && !_autoSyncCancellation.IsCancellationRequested)
+        {
+            _logger.LogDebug("Cancelling existing auto-sync loop before restarting.");
+            _autoSyncCancellation.Cancel();
+            _autoSyncCancellation.Dispose();
+        }
 
-        while (!_autoSyncCancellation.Token.IsCancellationRequested)
+        _autoSyncCancellation = new CancellationTokenSource();
+        var token = _autoSyncCancellation.Token;
+
+        while (!token.IsCancellationRequested)
         {
             try
             {
@@ -356,8 +501,8 @@ public class SyncService : ISyncService
                 }
                 else
                 {
-                    _logger.LogDebug("Automatic Sync Interval Triggered (Every {Interval}s)", intervalSeconds);
-                    await SyncAllAsync(_autoSyncCancellation.Token);
+                    _logger.LogDebug("Automatic Sync Interval Triggered (Every {Interval}s). Nudging queue.", intervalSeconds);
+                    _syncChannel.Writer.TryWrite(true);
                 }
             }
             catch (Exception ex)
@@ -379,7 +524,7 @@ public class SyncService : ISyncService
         }
     }
 
-    private void ReportProgress(string message, int total, int processed, string? currentItem = null, string? docId = null, string? pageId = null, int currentStep = 0, int totalSteps = 0)
+    private void ReportProgress(string message, int total, int processed, SyncStatus status, string? currentItem = null, string? docId = null, string? pageId = null, int currentStep = 0, int totalSteps = 0)
     {
         SyncProgress?.Invoke(this, new SyncProgressEventArgs
         {
@@ -390,7 +535,8 @@ public class SyncService : ISyncService
             CurrentDocumentId = docId,
             CurrentPageId = pageId,
             CurrentStep = currentStep,
-            TotalSteps = totalSteps
+            TotalSteps = totalSteps,
+            Status = status
         });
     }
 
@@ -482,6 +628,5 @@ public class SyncService : ISyncService
     public void Dispose()
     {
         _autoSyncCancellation?.Cancel();
-        _autoSyncTimer?.Dispose();
     }
 }

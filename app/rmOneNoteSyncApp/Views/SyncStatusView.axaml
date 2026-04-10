@@ -139,6 +139,10 @@
                                         <MenuItem Header="Cancel Sync" 
                                                   Command="{ReflectionBinding $parent[UserControl].DataContext.CancelSyncCommand}" 
                                                   CommandParameter="{Binding}" />
+                                        <MenuItem Header="Copy OneNote URL" 
+                                                  Command="{ReflectionBinding $parent[UserControl].DataContext.CopyUrlCommand}" 
+                                                  CommandParameter="{ReflectionBinding OneNoteUrl}" 
+                                                  IsVisible="{ReflectionBinding OneNoteUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                                     </ContextMenu>
                                 </Setter>
                             </Style>
@@ -175,26 +179,40 @@
                             <DataGridTemplateColumn Header="OneNote Page" Width="2*">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate x:DataType="vm:SyncItem">
-                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" 
-                                                    IsVisible="{Binding OneNoteUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                            <Button Command="{ReflectionBinding $parent[UserControl].DataContext.CopyUrlCommand}"
-                                                    CommandParameter="{Binding OneNoteUrl}"
-                                                    ToolTip.Tip="Copy Link"
-                                                    Classes="small stroke"
-                                                    Padding="5"
-                                                    CornerRadius="4">
-                                                <PathIcon Data="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" Width="12" Height="12"/>
-                                            </Button>
-                                            <Button Command="{ReflectionBinding $parent[UserControl].DataContext.OpenUrlCommand}"
-                                                    CommandParameter="{Binding OneNoteUrl}"
-                                                    Background="Transparent"
-                                                    BorderThickness="0"
-                                                    Padding="4"
-                                                    Cursor="Hand"
-                                                    ToolTip.Tip="{Binding OneNoteUrl}">
-                                                <TextBlock Text="{Binding OneNoteUrl}" Foreground="#2563eb" TextDecorations="Underline" TextTrimming="CharacterEllipsis" MaxWidth="600" />
-                                            </Button>
-                                        </StackPanel>
+                                        <Panel Margin="10,0">
+                                            <!-- Success State: OneNote Link -->
+                                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" 
+                                                        IsVisible="{Binding OneNoteUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                                <Button Command="{ReflectionBinding $parent[UserControl].DataContext.CopyUrlCommand}"
+                                                        CommandParameter="{Binding OneNoteUrl}"
+                                                        ToolTip.Tip="Copy Link"
+                                                        Classes="small stroke"
+                                                        Padding="5"
+                                                        CornerRadius="4">
+                                                    <PathIcon Data="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" Width="12" Height="12"/>
+                                                </Button>
+                                                <Button Command="{ReflectionBinding $parent[UserControl].DataContext.OpenUrlCommand}"
+                                                        CommandParameter="{Binding OneNoteUrl}"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Padding="4"
+                                                        Cursor="Hand"
+                                                        ToolTip.Tip="{Binding OneNoteUrl}">
+                                                    <TextBlock Text="{Binding OneNoteUrl}" Foreground="#2563eb" TextDecorations="Underline" TextTrimming="CharacterEllipsis" MaxWidth="600" />
+                                                </Button>
+                                            </StackPanel>
+
+                                            <!-- Failure State: Error Message -->
+                                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" 
+                                                        IsVisible="{Binding OneNoteUrl, Converter={x:Static StringConverters.IsNullOrEmpty}}">
+                                                <TextBlock Text="{Binding LastError}" 
+                                                           Foreground="#ef4444" 
+                                                           FontStyle="Italic"
+                                                           FontSize="12"
+                                                           TextTrimming="CharacterEllipsis" 
+                                                           MaxWidth="600" />
+                                            </StackPanel>
+                                        </Panel>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>

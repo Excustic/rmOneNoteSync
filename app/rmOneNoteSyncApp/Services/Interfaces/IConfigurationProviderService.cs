@@ -5,8 +5,11 @@ namespace rmOneNoteSyncApp.Services.Interfaces;
 
 public interface IConfigurationProviderService
 {
-    Task<string> GetConfigurationJsonAsync(string deviceId);
     Task<bool> UpdateDeviceConfigurationAsync(bool restartService = true);
+    Task<bool> RegisterEndpointAsync();
+    Task<bool> UpdateWhitelistAsync();
+    Task<bool> UpdateDaemonSettingsAsync(bool restartService = true);
     Task<int> GetServerPortAsync();
+    Task<(List<string> Whitelist, List<string> SyncFolders)> FetchWhitelistFromDeviceAsync();
     string ConfigPath { get; }
 }

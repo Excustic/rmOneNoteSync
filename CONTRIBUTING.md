@@ -69,7 +69,7 @@ flowchart LR
     OneNote((Microsoft OneNote<br/>Graph API))
 
     %% Network Connections
-    Avalonia <-->|SSH: Deploy & Config| Daemon
+    Avalonia <-->|SSH: Deploy; HTTP: Config| Daemon
     Http -->|HTTP POST| Receiver
     Uploader -->|HTTPS Upload| OneNote
     
@@ -118,7 +118,7 @@ This is the heaviest part of the codebase. Each service is an implementation of 
 | `DeploymentService` | `IDeploymentService` | Handles the full lifecycle of installing, updating, and uninstalling the C daemon on the tablet. It downloads the correct pre-compiled binaries from GitHub Releases (matching the device model), uploads them via SSH, writes config files, installs systemd service units, and starts the services. |
 | `OneNoteAuthService` | `IOneNoteAuthService` | Manages Microsoft Account authentication using [MSAL](https://learn.microsoft.com/en-us/entra/msal/). Handles interactive sign-in, silent token refresh, and sign-out. Persists the token cache to disk (`msalcache.bin`). |
 | `OneNoteClient` | `IOneNoteClient` | Wraps the [Microsoft Graph SDK](https://learn.microsoft.com/en-us/graph/sdks/sdks-overview) for all OneNote operations: listing/creating notebooks and sections, uploading InkML+HTML pages as multipart payloads, and managing page lifecycle. |
-| `ConfigurationProviderService` | `IConfigurationProviderService` | Generates and pushes `daemon.conf` to the tablet over SSH. This is how the desktop app tells the daemon where to send files (IP, port, API key), what documents to sync (the whitelist), and timing parameters. |
+| `ConfigurationProviderService` | `IConfigurationProviderService` | Manages device configuration via granular HTTP API. Instead of overwriting a single file, it interacts with endpoints like `/endpoints` and `/whitelist` to ensure non-destructive updates and persistence across multiple hosts. |
 | `RmConverterService` | `IRmConverterService` | Shells out to the `rmc` external tool to convert reMarkable's proprietary `.rm` ink format into InkML (`.xml`) and a presentation HTML file (`.html`). |
 | `StartupService` | `IStartupService` | Manages OS-level auto-start registration (e.g., adding a `.desktop` file to `~/.config/autostart` on Linux). |
 | `SoftwareUpdateService` | `ISoftwareUpdateService` | Checks the GitHub Releases API for newer versions of the application. |
@@ -129,7 +129,7 @@ Device detection (finding the reMarkable on the network) is OS-specific:
 
 | File | Platform | Strategy |
 |---|---|---|
-| `DeviceDetectionServiceBase.cs` | Shared | Contains the common detection logic: first check USB (`10.11.99.1`), then try a cached IP, then run an ARP scan with limited retries, and finally offer a manual scan button. Implements a 30-second grace period for temporary disconnections. |
+| `DeviceDetectionServiceBase.cs` | Shared | Contains common detection logic: first check USB (`10.11.99.1`), then cached IP, then ARP scan with limited retries. Implements a 30-second grace period for disconnections and **reactive IP tracking** (triggering automatic endpoint registration when the device changes IPs on the network). |
 | `WindowsDeviceDetectionService.cs` | Windows | Uses WMI/`System.Management` for ARP table queries. |
 | `LinuxDeviceDetectionService.cs` | Linux | Parses `/proc/net/arp` and uses `ip neigh`. |
 | `MacOSDeviceDetectionService.cs` | macOS | Shells out to `arp -a`. |
@@ -162,33 +162,42 @@ Avalonia XAML files for rendering the UI. Each `View` is bound to its correspond
 **Language:** C (C99).
 **Build System:** GNU Make with cross-compilation via the [reMarkable Codex toolchain](https://developer.remarkable.com/).
 
-The daemon is designed to be as lightweight as possible. It runs silently on the tablet and has two responsibilities: detecting document changes and sending modified pages to the desktop app.
+The daemon is designed to be as lightweight as possible. It runs silently on the tablet and has two main duties: detecting document changes and managing its own configuration state via a built-in HTTP server.
 
 ### Source Files (`src/`)
+
+#### `httpserver.c` — The Configuration API
+This module provides a REST-like API on port 8000 for the desktop app to manage the device without needing full SSH access for every setting change.
+- `GET /config` / `POST /config`: Manages core daemon settings (`daemon.conf`).
+- `GET /endpoints` / `POST /endpoints/add`: Manages the additive list of host URLs (`endpoints.conf`).
+- `GET /whitelist` / `PUT /whitelist`: Manages the sync document whitelist (`whitelist.dat`).
+- `GET /filetree`: Serves a JSON representation of the tablet's file structure (filters out items in the "trash").
+- `GET /version`: Returns current daemon version.
+- Uses `flock()` to ensure atomic, thread-safe access to configuration files.
 
 #### `watcher.c` — The Filesystem Watcher Service
 
 This is the first of two `systemd` services (`onenote-sync-watcher`). Its job is to watch for notebook changes and queue modified pages for upload.
 
 **How it works:**
-1. Reads paths and whitelist configuration from `daemon.conf`.
+1. Reads paths and whitelist configuration from `daemon.conf` and `whitelist.dat`.
 2. Opens the xochitl documents directory using Linux's [inotify](https://man7.org/linux/man-pages/man7/inotify.7.html) API (`inotify_init`, `inotify_add_watch`).
 3. Enters an infinite event loop, watching for `IN_CREATE`, `IN_MODIFY`, `IN_DELETE`, and `IN_MOVED_TO` events.
 4. When a `.metadata` file changes, it parses the JSON to extract `lastModified` and `lastOpened` timestamps. If the document was modified after it was last opened (meaning the user made edits), it scans all `.rm` pages in that document's subdirectory.
 5. For each modified page, it checks the shared **binary cache** (`.sync_cache`). If the page is new or has a newer `mtime`, it's added to the cache queue.
-6. Filters all events against a configurable **whitelist** of document UUIDs. Only explicitly selected notebooks are processed.
+6. Filters all events against a **whitelist** of document UUIDs stored in `whitelist.dat`. Only explicitly selected notebooks are processed.
 
 #### `httpclient.c` — The HTTP Upload Service
 
 This is the second `systemd` service (`onenote-sync-httpclient`). It reads the cache queue and uploads files to the desktop app.
 
 **How it works:**
-1. Reads configuration from `daemon.conf` (server URL, API key, upload interval, retry settings).
+1. Reads configuration from `daemon.conf` and server URLs from `endpoints.conf`.
 2. Enters a polling loop (default: every 30 seconds).
 3. Each cycle, it reloads the shared cache, grabs up to 10 pending pages, and attempts to upload each one.
-4. For each page, it reconstructs the full virtual path (e.g., `Academy/Physics/Calculus/Page 3`) using `metadata_parser`, then sends the `.rm` file via HTTP POST to the desktop app's sync server.
-5. The HTTP request includes custom headers (`X-API-Key`, `X-Document-Path`, `X-Document-Id`, `X-Filename`) that the desktop server uses to organize and identify the file.
-6. If the primary server URL fails, it retries with a configurable **fallback URL** (useful when the tablet can reach the desktop over either USB or WiFi).
+4. For each page, it reconstructs the full virtual path (e.g., `Academy/Physics/Calculus/Page 3`) using `metadata_parser`, then sends the `.rm` file via HTTP POST to one of the servers listed in `endpoints.conf`.
+5. The HTTP request includes custom headers (`X-API-Key`, `X-Document-Path`, `X-Document-Id`, `X-Filename`).
+6. **Priority Promotion:** If an upload succeeds, that server URL is promoted to the top of `endpoints.conf`, ensuring the most reliable connection is used first in future cycles.
 7. Successfully uploaded pages are removed from the cache queue.
 
 #### `cache_io.c` / `cache_io.h` — The Shared Binary Cache
@@ -217,11 +226,15 @@ A minimal, dependency-free HTTP client built on raw POSIX sockets. Only supports
 
 ### Configuration (`config/`)
 
+The daemon uses a split configuration system to ensure multi-host persistence without data loss.
+
 | File | Purpose |
 |---|---|
-| `daemon.conf` | Merged configuration containing paths (watch directory, log file, cache), server URLs, API key, upload interval, retry limits, timeout, and whitelist entries. Generated by `ConfigurationProviderService`. |
+| `daemon.conf` | Core daemon settings (API key, upload interval, retry limits). |
+| `endpoints.conf` | An additive, priority-ordered list of server URLs. Successful connections are moved to the top. |
+| `whitelist.dat` | A flat list of document/folder UUIDs explicitly selected for sync. |
 | `onenote-sync-watcher.service` | systemd unit file for the watcher daemon. Starts after `home.mount`, restarts on failure. |
-| `onenote-sync-httpclient.service` | systemd unit file for the httpclient daemon. Starts after network is available, wants the watcher service to be running. |
+| `onenote-sync-httpclient.service` | systemd unit file for the httpclient daemon. Starts after network is available. |
 
 ### Testing Tools (`testing_tools/`)
 

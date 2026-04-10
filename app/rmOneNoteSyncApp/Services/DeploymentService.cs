@@ -51,7 +51,7 @@ namespace rmOneNoteSyncApp.Services
                     var deviceIp = _detectionService.CurrentDevice?.IpAddress ?? AppSettings.DefaultDeviceIp;
                     using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
                     string versionContent = await httpClient.GetStringAsync($"http://{deviceIp}:8000/version");
-                    
+
                     if (string.IsNullOrEmpty(versionContent))
                     {
                         throw new ArgumentNullException(nameof(versionContent));
@@ -120,7 +120,7 @@ namespace rmOneNoteSyncApp.Services
                 catch { /* Ignore cleanup errors */ }
 
                 // Step 5: Upload configuration files
-                await UploadConfigurationAsync();
+                _ = await _configProvider.UpdateDeviceConfigurationAsync(restartService: false);
                 ReportProgress("Configuration uploaded", 0.6, DeploymentStage.ConfiguringServices);
 
                 // Step 6: Install systemd services
@@ -193,7 +193,7 @@ namespace rmOneNoteSyncApp.Services
             httpClient.DefaultRequestHeaders.Add("User-Agent", "rmOneNoteSyncApp-Installer");
 
             // 1. Fixed URL for the new repo
-            string releaseUrl = "https://api.github.com/repos/Excustic/rmOneNoteSync/releases/latest";
+            string releaseUrl = SoftwareUpdateService.RepoApiUrl;
             GitHubRelease? releaseInfo = await httpClient.GetFromJsonAsync<GitHubRelease>(releaseUrl);
 
             if (releaseInfo?.Assets == null || releaseInfo.Assets.Count == 0)
@@ -207,7 +207,7 @@ namespace rmOneNoteSyncApp.Services
             GitHubAsset asset = releaseInfo.Assets.FirstOrDefault(a => a.Name.Equals(expectedAssetName, StringComparison.OrdinalIgnoreCase))
                 ?? throw new Exception($"Could not find binary '{expectedAssetName}' for your device in the latest release.");
 
-            ReportProgress($"Downloading {asset.Name}...", 0.4, DeploymentStage.DownloadingBinaries);
+            ReportProgress($"Downloading {asset.BrowserDownloadUrl}...", 0.4, DeploymentStage.DownloadingBinaries);
 
             string tempExtractDir = Path.Combine(Path.GetTempPath(), $"rmOneNoteSync_{Guid.NewGuid()}");
             Directory.CreateDirectory(tempExtractDir);
@@ -256,15 +256,6 @@ namespace rmOneNoteSyncApp.Services
                 await _sshService.UploadFileAsync(localFile, remotePath);
                 _ = await _sshService.ExecuteCommandAsync($"chmod +x {remotePath}");
             }
-        }
-
-        private async Task UploadConfigurationAsync()
-        {            // 1. Grab the clean version (e.g., "0.6.0") just like we did for the UI
-            string versionInfo = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
-            string cleanVersion = versionInfo.Split('+')[0];
-
-            // Generate daemon.conf via ConfigurationProviderService bypassng service restart
-            _ = await _configProvider.UpdateDeviceConfigurationAsync(restartService: false);
         }
 
         private async Task InstallSystemdServicesAsync()

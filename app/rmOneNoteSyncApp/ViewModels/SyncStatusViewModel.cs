@@ -65,6 +65,8 @@ public partial class SyncStatusViewModel : ViewModelBase
     [ObservableProperty]
     private string _syncProgress = "";
 
+    private readonly HashSet<string> _clearedItems = new();
+
     public SyncStatusViewModel(
         IDatabaseService databaseService,
         ISyncServerService syncServer,
@@ -115,22 +117,36 @@ public partial class SyncStatusViewModel : ViewModelBase
         {
             // Load overall stats
             var pendingPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Pending);
+            var queuedPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Queued);
+            var transcodingPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Transcoding);
+            var uploadingPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Uploading);
+            var indexingPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Indexing);
+            var inProgressPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.InProgress);
+
+            pendingPages.AddRange(queuedPages);
+            pendingPages.AddRange(transcodingPages);
+            pendingPages.AddRange(uploadingPages);
+            pendingPages.AddRange(indexingPages);
+            pendingPages.AddRange(inProgressPages);
+
             var uploadedPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Uploaded);
             var failedPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Failed);
             var skippedPages = await _databaseService.GetPagesByStatusAsync(SyncStatus.Skipped);
 
-            _logger?.LogDebug("Loading recent files. Found {Pending} pending, {Uploaded} uploaded, {Failed} failed, {Skipped} skipped.",
+            _logger?.LogDebug("Loading recent files. Found {Pending} pending/transient, {Uploaded} uploaded, {Failed} failed, {Skipped} skipped.",
                 pendingPages.Count, uploadedPages.Count, failedPages.Count, skippedPages.Count);
 
             // Load actual recent files regardless of status
             var recentPages = await _databaseService.GetRecentPagesAsync(50);
             _logger?.LogDebug("Loaded {Count} recent pages from DB.", recentPages.Count);
 
-            // Load Notebook stats by grabbing tracked Collections mapped to Sync Configuration directly!
-            var config = await _databaseService.GetConfigurationAsync();
-            var whitelistedIds = config?.SyncFiles ?? new List<string>();
-            var allDocs = await _databaseService.GetAllDocumentsAsync();
-            var rootBooks = allDocs.Count(d => whitelistedIds.Contains(d.DocumentId));
+            // True Notebook count using union of active categories
+            var activePages = new List<PageMetadata>();
+            activePages.AddRange(pendingPages);
+            activePages.AddRange(uploadedPages);
+            activePages.AddRange(failedPages);
+            activePages.AddRange(skippedPages);
+            var rootBooks = activePages.Select(p => p.DocumentId).Distinct().Count();
 
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -139,7 +155,10 @@ public partial class SyncStatusViewModel : ViewModelBase
                     var newItems = new List<SyncItem>();
                     foreach (var page in recentPages)
                     {
-                        newItems.Add(MapToSyncItem(page));
+                        if (!_clearedItems.Contains($"{page.DocumentId}_{page.PageId}"))
+                        {
+                            newItems.Add(MapToSyncItem(page));
+                        }
                     }
                     SyncItems = new ObservableCollection<SyncItem>(newItems);
                     SortSyncItems();
@@ -242,13 +261,18 @@ public partial class SyncStatusViewModel : ViewModelBase
             // Mark items as 'InProgress' based on progress message if applicable
             if (!string.IsNullOrEmpty(e.CurrentDocumentId) && !string.IsNullOrEmpty(e.CurrentPageId))
             {
+                bool orderChanged = false;
                 foreach (var i in SyncItems)
                 {
                     if (i.DocumentId == e.CurrentDocumentId && i.PageId == e.CurrentPageId)
                     {
-                        if (i.Status == SyncStatus.Pending)
+                        if (i.Status == SyncStatus.Pending || i.Status == SyncStatus.Queued || i.Status == SyncStatus.Transcoding || i.Status == SyncStatus.Uploading || i.Status == SyncStatus.Indexing || i.Status == SyncStatus.InProgress)
                         {
-                            i.Status = SyncStatus.InProgress;
+                            if (i.Status != e.Status)
+                            {
+                                i.Status = e.Status;
+                                orderChanged = true;
+                            }
                         }
 
                         if (e.TotalSteps > 0)
@@ -259,12 +283,11 @@ public partial class SyncStatusViewModel : ViewModelBase
 
                         i.UpdateStatusDisplay();
                     }
-                    else if (i.Status == SyncStatus.InProgress)
-                    {
-                        i.Status = SyncStatus.Pending;
-                    }
                 }
-                SortSyncItems();
+                if (orderChanged)
+                {
+                    SortSyncItems();
+                }
             }
         });
     }
@@ -279,6 +302,7 @@ public partial class SyncStatusViewModel : ViewModelBase
                 item.Status = e.Success ? SyncStatus.Uploaded : SyncStatus.Failed;
                 item.LastError = e.ErrorMessage;
                 item.OneNoteUrl = e.OneNoteUrl;
+                item.UpdateStatusDisplay();
             }
             SortSyncItems();
 
@@ -422,28 +446,33 @@ public partial class SyncStatusViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task ClearCompletedAsync()
+    private void ClearCompleted()
     {
-        await LoadSyncStatusAsync();
+        var completed = SyncItems.Where(i => i.Status == SyncStatus.Uploaded).ToList();
+        foreach (var item in completed)
+        {
+            _clearedItems.Add($"{item.DocumentId}_{item.PageId}");
+            SyncItems.Remove(item);
+        }
     }
 
     [RelayCommand]
     private async Task CancelSyncAsync(SyncItem? item)
     {
         if (item == null) return;
-        
+
         await _syncService.CancelSyncItemAsync(item.DocumentId, item.PageId);
         item.Status = SyncStatus.Skipped;
-        
+
         // Remove from list if it's currently pending/inflight
         var existing = SyncItems.FirstOrDefault(i => i.DocumentId == item.DocumentId && i.PageId == item.PageId);
         if (existing != null)
         {
             SyncItems.Remove(existing);
         }
-        
+
         SortSyncItems();
-        
+
         // Refresh counts
         await LoadSyncStatusAsync();
     }
@@ -533,14 +562,28 @@ public partial class SyncStatusViewModel : ViewModelBase
         var sorted = SyncItems.OrderBy(i => i.Status switch
         {
             SyncStatus.InProgress => 0,
+            SyncStatus.Queued => 0,
+            SyncStatus.Transcoding => 0,
+            SyncStatus.Uploading => 0,
+            SyncStatus.Indexing => 0,
             SyncStatus.Pending => 1,
-            SyncStatus.Uploaded => 2,
-            SyncStatus.Failed => 3,
+            SyncStatus.Failed => 2,
+            SyncStatus.Uploaded => 3,
             SyncStatus.Skipped => 4,
-            _ => 5
+            SyncStatus.Deleted => 5,
+            _ => 10
         }).ThenByDescending(i => i.ReceivedTime).ToList();
 
-        SyncItems = new ObservableCollection<SyncItem>(sorted);
+        // Implement in-place update using Move to preserve visual states!
+        for (int i = 0; i < sorted.Count; i++)
+        {
+            var expected = sorted[i];
+            if (SyncItems[i] != expected)
+            {
+                var oldIndex = SyncItems.IndexOf(expected);
+                SyncItems.Move(oldIndex, i);
+            }
+        }
     }
 }
 
@@ -569,8 +612,8 @@ public class SyncItem : ObservableObject
         }
     }
 
-    public bool IsUploading => Status == SyncStatus.InProgress;
-    public bool IsNotUploading => Status != SyncStatus.InProgress;
+    public bool IsUploading => Status == SyncStatus.InProgress || Status == SyncStatus.Queued || Status == SyncStatus.Transcoding || Status == SyncStatus.Uploading || Status == SyncStatus.Indexing;
+    public bool IsNotUploading => !IsUploading;
 
     private double _uploadProgress;
     public double UploadProgress
@@ -589,18 +632,28 @@ public class SyncItem : ObservableObject
     public string? LastError { get; set; }
     public string? OneNoteUrl { get; set; }
 
+    public string? StatusDetail => !string.IsNullOrEmpty(OneNoteUrl) ? OneNoteUrl : LastError;
+    public bool HasDetail => !string.IsNullOrEmpty(StatusDetail);
+
     public void UpdateStatusDisplay()
     {
         OnPropertyChanged(nameof(StatusDisplay));
+        OnPropertyChanged(nameof(StatusDetail));
+        OnPropertyChanged(nameof(HasDetail));
     }
 
     public string StatusDisplay => Status switch
     {
-        SyncStatus.Pending => "⏳ Pending",
-        SyncStatus.InProgress => "🔄 Uploading...",
-        SyncStatus.Uploaded => "✅ Uploaded",
-        SyncStatus.Failed => "❌ Failed",
-        SyncStatus.Skipped => "⏭️ Skipped",
+        SyncStatus.Pending => "⏳Pending",
+        SyncStatus.Queued => "🕒Queued",
+        SyncStatus.Transcoding => "⚙️Converting",
+        SyncStatus.Uploading => "⬆️Uploading",
+        SyncStatus.Indexing => "🔍Indexing",
+        SyncStatus.InProgress => "🔄Processing",
+        SyncStatus.Uploaded => "✅Uploaded",
+        SyncStatus.Failed => "❌Failed",
+        SyncStatus.Skipped => "⏭️Skipped",
+        SyncStatus.Deleted => "🗑️Deleted",
         _ => "Unknown"
     };
 }

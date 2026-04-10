@@ -44,6 +44,7 @@ public class OneNoteClient : IOneNoteClient
     // Graph API endpoints
     private const string GraphBaseUrl = "https://graph.microsoft.com/v1.0";
     private const string OneNoteBaseUrl = "https://graph.microsoft.com/v1.0/me/onenote";
+    private readonly Random _jitterer = new();
 
     public OneNoteClient(
         ILogger<OneNoteClient> logger,
@@ -108,7 +109,7 @@ public class OneNoteClient : IOneNoteClient
 
             var request = await CreateAuthenticatedRequestAsync(
                 HttpMethod.Get,
-                $"{OneNoteBaseUrl}/notebooks");
+                $"{OneNoteBaseUrl}/notebooks?$expand=sections");
 
             var response = await _httpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
@@ -222,28 +223,54 @@ public class OneNoteClient : IOneNoteClient
 
     public async Task<List<OneNotePage>> GetPagesAsync(string sectionId)
     {
-        try
+        int maxRetries = 3;
+        for (int retry = 0; retry < maxRetries; retry++)
         {
-            _logger.LogDebug("Fetching pages for section: {Id}", sectionId);
+            try
+            {
+                _logger.LogDebug("Fetching pages for section: {Id} (Attempt {Attempt}/{Max})", 
+                    sectionId, retry + 1, maxRetries);
 
-            var request = await CreateAuthenticatedRequestAsync(
-                HttpMethod.Get,
-                $"{OneNoteBaseUrl}/sections/{sectionId}/pages?$select=id,title,createdDateTime,lastModifiedDateTime,contentUrl,links");
+                var request = await CreateAuthenticatedRequestAsync(
+                    HttpMethod.Get,
+                    $"{OneNoteBaseUrl}/sections/{sectionId}/pages?$select=id,title,createdDateTime,lastModifiedDateTime,contentUrl,links");
 
-            var response = await _httpClient.SendAsync(request);
-            if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
+                var response = await _httpClient.SendAsync(request);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    bool isRetryable = response.StatusCode == System.Net.HttpStatusCode.InternalServerError 
+                                    || response.StatusCode == (System.Net.HttpStatusCode)429
+                                    || response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable;
 
-            var json = await response.Content.ReadAsStringAsync();
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var result = JsonSerializer.Deserialize<ODataResponse<OneNotePage>>(json, options);
+                    if (retry < maxRetries - 1 && isRetryable)
+                    {
+                        TimeSpan delay = TimeSpan.FromSeconds(Math.Pow(2, retry) + _jitterer.NextDouble() * 2);
+                        _logger.LogWarning("Graph API error ({Status}) fetching pages. Retrying in {Delay}s...", response.StatusCode, delay.TotalSeconds);
+                        await Task.Delay(delay);
+                        continue;
+                    }
+                    await ThrowDetailedErrorAsync(response);
+                }
 
-            return result?.Value ?? new List<OneNotePage>();
+                var json = await response.Content.ReadAsStringAsync();
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var result = JsonSerializer.Deserialize<ODataResponse<OneNotePage>>(json, options);
+
+                return result?.Value ?? new List<OneNotePage>();
+            }
+            catch (Exception ex)
+            {
+                if (retry == maxRetries - 1)
+                {
+                    _logger.LogError(ex, "Failed to get pages for section {Id} after {Count} attempts", sectionId, retry + 1);
+                    throw;
+                }
+                
+                await Task.Delay(TimeSpan.FromSeconds(1));
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to get pages for section {Id}", sectionId);
-            throw;
-        }
+        throw new Exception("Unreachable code reached during page listing");
     }
 
     public async Task<OneNotePage> CreatePageAsync(
@@ -287,7 +314,7 @@ public class OneNoteClient : IOneNoteClient
         byte[] htmlData,
         Dictionary<string, string> metadata)
     {
-        int maxRetries = 3;
+        int maxRetries = 5;
         for (int retry = 0; retry < maxRetries; retry++)
         {
             try
@@ -333,7 +360,35 @@ public class OneNoteClient : IOneNoteClient
                 request.Content = content;
 
                 var response = await _httpClient.SendAsync(request);
-                if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Check if error is retryable
+                    bool isRetryable = response.StatusCode == System.Net.HttpStatusCode.InternalServerError 
+                                    || response.StatusCode == (System.Net.HttpStatusCode)429 // TooManyRequests
+                                    || response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable
+                                    || response.StatusCode == System.Net.HttpStatusCode.GatewayTimeout;
+
+                    if (retry < maxRetries - 1 && isRetryable)
+                    {
+                        TimeSpan delay = TimeSpan.FromSeconds(Math.Pow(2, retry) + _jitterer.NextDouble() * 3);
+                        
+                        // Respect Retry-After header if present
+                        if (response.Headers.RetryAfter != null)
+                        {
+                            if (response.Headers.RetryAfter.Delta.HasValue)
+                                delay = response.Headers.RetryAfter.Delta.Value;
+                            else if (response.Headers.RetryAfter.Date.HasValue)
+                                delay = response.Headers.RetryAfter.Date.Value - DateTimeOffset.Now;
+                        }
+
+                        _logger.LogWarning("Graph API error ({Status}) on upload. Retrying in {Delay}s...", response.StatusCode, delay.TotalSeconds);
+                        await Task.Delay(delay);
+                        continue;
+                    }
+
+                    await ThrowDetailedErrorAsync(response);
+                }
 
                 // Extract page ID from response headers or body
                 var location = response.Headers.Location?.ToString() ?? "";
@@ -346,13 +401,13 @@ public class OneNoteClient : IOneNoteClient
             {
                 bool isNetworkOrTimeout = ex is HttpRequestException
                     || ex is TaskCanceledException
-                    || ex.Message.Contains("GatewayTimeout")
-                    || ex.Message.Contains("50");
+                    || ex.Message.Contains("GatewayTimeout");
 
                 if (retry < maxRetries - 1 && isNetworkOrTimeout)
                 {
-                    _logger.LogWarning(ex, "Failed to upload page, retrying in {Delay}s...", 3 * (retry + 1));
-                    await Task.Delay(TimeSpan.FromSeconds(3 * (retry + 1)));
+                    TimeSpan delay = TimeSpan.FromSeconds(Math.Pow(2, retry) + _jitterer.NextDouble() * 3);
+                    _logger.LogWarning(ex, "Failed to upload page (network/timeout), retrying in {Delay}s...", delay.TotalSeconds);
+                    await Task.Delay(delay);
                     continue;
                 }
 
@@ -436,24 +491,49 @@ public class OneNoteClient : IOneNoteClient
 
     public async Task<OneNotePage> GetPageAsync(string pageId)
     {
-        try
+        int maxRetries = 6;
+        int[] delays = { 2, 4, 8, 15, 20, 25 }; // Incremental delays to cover ~60s+ indexing time
+        
+        for (int retry = 0; retry < maxRetries; retry++)
         {
-            var request = await CreateAuthenticatedRequestAsync(
-                HttpMethod.Get,
-                $"{OneNoteBaseUrl}/pages/{pageId}");
+            try
+            {
+                var request = await CreateAuthenticatedRequestAsync(
+                    HttpMethod.Get,
+                    $"{OneNoteBaseUrl}/pages/{pageId}");
 
-            var response = await _httpClient.SendAsync(request);
-            if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
+                var response = await _httpClient.SendAsync(request);
+                
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound && retry < maxRetries - 1)
+                {
+                    // Eventual consistency — page might be uploaded but not yet available for GET.
+                    int delay = delays[retry];
+                    _logger.LogWarning("Page {Id} not found yet (eventual consistency). Attempt {Attempt}/{Max}. Retrying in {Delay}s...", 
+                        pageId, retry + 1, maxRetries, delay);
+                    await Task.Delay(TimeSpan.FromSeconds(delay));
+                    continue;
+                }
 
-            var json = await response.Content.ReadAsStringAsync();
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            return JsonSerializer.Deserialize<OneNotePage>(json, options)!;
+                if (!response.IsSuccessStatusCode) await ThrowDetailedErrorAsync(response);
+
+                var json = await response.Content.ReadAsStringAsync();
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                return JsonSerializer.Deserialize<OneNotePage>(json, options)!;
+            }
+            catch (Exception ex)
+            {
+                if (retry == maxRetries - 1)
+                {
+                    _logger.LogError(ex, "Failed to get page {Id} after {Count} attempts", pageId, retry + 1);
+                    throw;
+                }
+                
+                _logger.LogWarning(ex, "Transient error getting page {Id}. Retrying...", pageId);
+                await Task.Delay(TimeSpan.FromSeconds(1));
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to get page {Id}", pageId);
-            throw;
-        }
+        
+        throw new Exception("Unreachable code reached during page retrieval");
     }
 
     public async Task<Stream> GetPageContentAsync(string pageId)
@@ -544,6 +624,7 @@ public class Notebook
     public DateTime LastModifiedDateTime { get; set; }
     public string? Self { get; set; }
     public OneNoteLinks? Links { get; set; }
+    public List<Section>? Sections { get; set; }
 }
 
 public class Section

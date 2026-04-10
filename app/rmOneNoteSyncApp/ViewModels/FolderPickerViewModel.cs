@@ -471,7 +471,7 @@ public partial class FolderPickerViewModel : ViewModelBase
 
                 if (_configProvider != null)
                 {
-                    var success = await _configProvider.UpdateDeviceConfigurationAsync();
+                    var success = await _configProvider.UpdateWhitelistAsync();
                     if (success)
                     {
                         StatusMessage = $"✅ Configuration synced to reMarkable! {selectedDocIds.Count} documents will sync.";
