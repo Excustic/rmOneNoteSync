@@ -244,6 +244,7 @@ public class SshService(ILogger<SshService> logger) : ISshService, IDisposable
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to upload file");
+                throw;
             }
         });
 

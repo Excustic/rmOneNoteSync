@@ -94,6 +94,14 @@ namespace rmOneNoteSyncApp.Services
             {
                 ReportProgress("Starting deployment...", 0, DeploymentStage.PreparingFiles);
 
+                // Stop running services to unlock binaries for update
+                try
+                {
+                    _ = await _sshService.ExecuteCommandAsync("systemctl stop onenote-sync-watcher");
+                    _ = await _sshService.ExecuteCommandAsync("systemctl stop onenote-sync-httpclient");
+                }
+                catch { }
+
                 // Step 1: Prepare filesystem
                 await PrepareFilesystemAsync();
                 ReportProgress("Filesystem prepared", 0.2, DeploymentStage.PreparingFiles);
@@ -156,16 +164,6 @@ namespace rmOneNoteSyncApp.Services
         {
             // Make filesystem writable
             _ = await _sshService.ExecuteCommandAsync("mount -o remount,rw /");
-
-            // Unmount /etc if it's separately mounted
-            try
-            {
-                _ = await _sshService.ExecuteCommandAsync("umount /etc -l");
-            }
-            catch
-            {
-                // /etc might not be separately mounted, that's OK
-            }
         }
 
         private async Task CreateDirectoryStructureAsync()
