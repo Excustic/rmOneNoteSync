@@ -394,7 +394,7 @@ public partial class SettingsViewModel : ViewModelBase
             {
                 _logger?.LogInformation("Disconnecting device and resetting configuration");
 
-
+                await _oneNoteAuthService.SignOutAsync();
                 // Completely erase the database file and recreate
                 await _databaseService.NukeDatabaseAsync();
 

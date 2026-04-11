@@ -111,6 +111,42 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    [ObservableProperty] private bool _isTourVisible;
+    [ObservableProperty] private string _currentTourStep = "0";
+    [ObservableProperty] private string _proceedButtonText = "Next Step";
+
+    [RelayCommand]
+    private void StartTour()
+    {
+        CurrentTourStep = "1";
+        // Stay on current view (Dashboard) for the welcome step
+    }
+
+    [RelayCommand]
+    private void NextTourStep()
+    {
+        if (!int.TryParse(CurrentTourStep, out int step)) return;
+        step++;
+        CurrentTourStep = step.ToString();
+
+        switch (step)
+        {
+            case 2: Navigate("Settings"); break;
+            case 3: Navigate("FileBrowser"); break;
+            case 4: Navigate("SyncStatus"); break;
+            case 5: Navigate("Dashboard"); break;
+            case 6: { Navigate("Logs"); ProceedButtonText = "Finish"; }; break;
+            default: DismissTour(); break;
+        }
+    }
+
+    [RelayCommand]
+    private void DismissTour()
+    {
+        IsTourVisible = false;
+        CurrentTourStep = "0";
+    }
+
     public bool CanConnect => IsConnected && !string.IsNullOrWhiteSpace(DevicePassword) && !IsAuthenticating &&
                               !IsAuthenticated;
     public bool CanCompleteSetup => IsAuthenticated && IsOneNoteConfigured;
@@ -177,7 +213,7 @@ public partial class MainViewModel : ViewModelBase
         Task.Run(async () =>
         {
             var config = await _databaseService.GetConfigurationAsync();
-            
+
             // Recover any items that were left InProgress (e.g. app crashed)
             await _syncService.RecoverInProgressItemsAsync();
 
@@ -452,14 +488,14 @@ public partial class MainViewModel : ViewModelBase
 
                 // Save configuration
                 var config = await _databaseService.GetConfigurationAsync() ?? new SyncConfiguration();
-                
+
                 config.DeviceIp = CurrentDevice?.IpAddress ?? AppSettings.DefaultDeviceIp;
                 config.DevicePassword = this.DevicePassword;
                 config.DeviceMacAddress = _fetchedMacAddress;
                 config.EnableWifiSync = EnableWifi;
                 config.LastNetworkIp = wifiIp;
                 config.AutoSync = true;
-                
+
                 // Fetch latest whitelist from device (Source of Truth)
                 var (deviceWhitelist, deviceFolders) = await _configProvider.FetchWhitelistFromDeviceAsync();
                 if (deviceWhitelist.Count > 0 || deviceFolders.Count > 0)
@@ -468,9 +504,9 @@ public partial class MainViewModel : ViewModelBase
                     config.SyncFiles = deviceWhitelist;
                     config.SyncFolders = deviceFolders;
                 }
-                
+
                 await _databaseService.SaveConfigurationAsync(config);
-                
+
                 // Refresh dashboard to show imported selection
                 var dashboardVm = App.ServiceProvider?.GetService<DashboardViewModel>();
                 if (dashboardVm != null)
@@ -483,10 +519,11 @@ public partial class MainViewModel : ViewModelBase
                 {
                     Model = deviceInfo["Model"]
                 };
+                DeploymentResult res = new() { Success = true };
                 if (!installStatus.IsInstalled)
                 {
                     _logger.LogDebug("No installation found on device. Deploying fresh daemon...");
-                    await _deploymentService.DeployAsync(dev);
+                    res = await _deploymentService.DeployAsync(dev);
                     await _sshService.RestartServiceAsync();
                 }
                 else if (installStatus.InstalledVersion != currentAppVersion)
@@ -500,7 +537,7 @@ public partial class MainViewModel : ViewModelBase
                         Progress = 0
                     });
 
-                    await _deploymentService.UpdateAsync(dev);
+                    res = await _deploymentService.UpdateAsync(dev);
                     await _sshService.RestartServiceAsync();
 
                     // Finalize configuration by pushing endpoints via HTTP
@@ -510,19 +547,18 @@ public partial class MainViewModel : ViewModelBase
                 {
                     OnDeploymentProgress(this, new DeploymentProgressEventArgs()
                     {
-                        Stage = DeploymentStage.Checking,
+                        Stage = DeploymentStage.Complete,
                         Message = "Version is up to date!",
                         Progress = 1
                     });
+                }
+                if (res.Success && OneNoteStatusText.Contains("Signed in as"))
+                {
+                    // Ensure endpoints are registered if everything else is fine
+                    await _configProvider.RegisterEndpointAsync();
 
-                    if (OneNoteStatusText.Contains("Signed in as"))
-                    {
-                        // Ensure endpoints are registered if everything else is fine
-                        await _configProvider.RegisterEndpointAsync();
-
-                        OnPropertyChanged(nameof(CanCompleteSetup));
-                        CompleteSetupCommand.NotifyCanExecuteChanged();
-                    }
+                    OnPropertyChanged(nameof(CanCompleteSetup));
+                    CompleteSetupCommand.NotifyCanExecuteChanged();
                 }
             }
             else
@@ -602,6 +638,10 @@ public partial class MainViewModel : ViewModelBase
             ShowSetupScreen = false;
             CurrentView = "Dashboard";
             CurrentViewModel = App.ServiceProvider?.GetRequiredService<DashboardViewModel>();
+
+            // Trigger Guided Tour
+            IsTourVisible = true;
+            StartTour();
         });
     }
 

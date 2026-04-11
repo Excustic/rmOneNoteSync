@@ -276,6 +276,57 @@
                     </ContentControl>
                 </Border>
             </Grid>
+            <!-- Guided Tour Overlay -->
+            <Border Background="#B3000000" IsVisible="{Binding IsTourVisible}" ZIndex="100">
+                <Border Background="White" CornerRadius="12" Padding="32" Width="550" 
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        BoxShadow="0 15 30 0 #60000000">
+                    <StackPanel Spacing="24">
+                        
+                        <!-- Slide 1 -->
+                        <StackPanel Spacing="16" IsVisible="{Binding CurrentTourStep, Converter={StaticResource EqualityConverter}, ConverterParameter=1}">
+                            <TextBlock Text="Welcome to rmOneNoteSync! 👋" FontWeight="Bold" FontSize="24" Foreground="#1a1d2e"/>
+                            <TextBlock Text="This is a two-part system. The main application runs right here on your PC, while a lightweight service runs quietly on your reMarkable tablet. Let's take a quick tour!" TextWrapping="Wrap" Foreground="#404040" FontSize="15" LineHeight="24"/>
+                        </StackPanel>
+
+                        <!-- Slide 2 -->
+                        <StackPanel Spacing="16" IsVisible="{Binding CurrentTourStep, Converter={StaticResource EqualityConverter}, ConverterParameter=2}">
+                            <TextBlock Text="Settings - Device &amp; PC ⚙️" FontWeight="Bold" FontSize="24" Foreground="#1a1d2e"/>
+                            <TextBlock Text="Notice how we've jumped to the Settings tab in the background! 'Device Connection' options affect how your PC communicates with your tablet. 'Sync Interval' controls how often a 'sync cycle' is triggered. During a sync cycle, the service on your tablet automatically packages and sends changes. Since you're signed in to Microsoft, you're all set here!" TextWrapping="Wrap" Foreground="#404040" FontSize="15" LineHeight="24"/>
+                        </StackPanel>
+
+                        <!-- Slide 3 -->
+                        <StackPanel Spacing="16" IsVisible="{Binding CurrentTourStep, Converter={StaticResource EqualityConverter}, ConverterParameter=3}">
+                            <TextBlock Text="Choose Your Notebooks 📁" FontWeight="Bold" FontSize="24" Foreground="#1a1d2e"/>
+                            <TextBlock Text="Select the specific folders or notebooks you want to track. Once selected, the service running on your reMarkable checks them constantly and starts syncing them automatically. Your 'potential OneNote notebook candiadtes' will appear in your dashboard once you've clicked 'Load Files' in the file browser." TextWrapping="Wrap" Foreground="#404040" FontSize="15" LineHeight="24"/>
+                        </StackPanel>
+
+                        <!-- Slide 4 -->
+                        <StackPanel Spacing="16" IsVisible="{Binding CurrentTourStep, Converter={StaticResource EqualityConverter}, ConverterParameter=4}">
+                            <TextBlock Text="Monitoring Sync 🔄" FontWeight="Bold" FontSize="24" Foreground="#1a1d2e"/>
+                            <TextBlock Text="The Sync Status panel shows your notebooks being processed and uploaded to the Microsoft Cloud. Your tablet sends these automatically based on your sync interval. If you wish to trigger sync for pre-existing files, hit the 'Manual Sync' button on Notebook candidates in the dashboard to push your edits to OneNote at the next sync cycle." TextWrapping="Wrap" Foreground="#404040" FontSize="15" LineHeight="24"/>
+                            <TextBlock Text="Tip: Microsoft has API limits! Pushing 50 pages manually at once might fail. It's best to do updates in short batches." TextWrapping="Wrap" Foreground="#3b82f6" FontWeight="SemiBold" FontSize="14" LineHeight="22"/>
+                        </StackPanel>
+
+                        <!-- Slide 5 -->
+                        <StackPanel Spacing="16" IsVisible="{Binding CurrentTourStep, Converter={StaticResource EqualityConverter}, ConverterParameter=5}">
+                            <TextBlock Text="Your Dashboard 🏠" FontWeight="Bold" FontSize="24" Foreground="#1a1d2e"/>
+                            <TextBlock Text="Once uploaded, your pages appear right here on the Dashboard with 1-click links to open them directly in OneNote. Note the structure structure: rmOneNoteSync leverages parent folders as OneNote Notebooks, and the containing .rm files as Sections. E.g. Academy/Math/Combinatorics.rm will appear as a 'Combinatorics' section in the rm_Academy_Math notebook in OneNote." TextWrapping="Wrap" Foreground="#404040" FontSize="15" LineHeight="24"/>
+                        </StackPanel>
+                        
+                        <!-- Slide 6 -->
+                        <StackPanel Spacing="16" IsVisible="{Binding CurrentTourStep, Converter={StaticResource EqualityConverter}, ConverterParameter=6}">
+                            <TextBlock Text="Under The Hood 📝" FontWeight="Bold" FontSize="24" Foreground="#1a1d2e"/>
+                            <TextBlock Text="If something ever goes wrong or gets stuck, the Logs tab shows you the raw activity of both the desktop app and the tablet service. You're ready to go!" TextWrapping="Wrap" Foreground="#404040" FontSize="15" LineHeight="24"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
+                            <Button Content="Skip Tour" Command="{Binding DismissTourCommand}" Classes="nav-button" Foreground="#707070" Padding="12,8" Background="Transparent"/>
+                            <Button Content="{Binding ProceedButtonText}" Command="{Binding NextTourStepCommand}" Background="#3b82f6" Foreground="White" Padding="20,10" CornerRadius="6" FontWeight="Medium"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Border>
         </Panel>
     </Grid>
 </Window>

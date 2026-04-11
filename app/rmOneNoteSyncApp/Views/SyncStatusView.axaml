@@ -139,10 +139,24 @@
                                         <MenuItem Header="Cancel Sync" 
                                                   Command="{ReflectionBinding $parent[UserControl].DataContext.CancelSyncCommand}" 
                                                   CommandParameter="{Binding}" />
+                                        <Separator/>
+                                        <MenuItem Header="Copy Virtual Path" 
+                                                  Command="{ReflectionBinding $parent[UserControl].DataContext.CopyTextCommand}" 
+                                                  CommandParameter="{ReflectionBinding VirtualPath}" />
+                                        <MenuItem Header="Copy Status" 
+                                                  Command="{ReflectionBinding $parent[UserControl].DataContext.CopyTextCommand}" 
+                                                  CommandParameter="{ReflectionBinding StatusDisplay}" />
+                                        <MenuItem Header="Copy Received Time" 
+                                                  Command="{ReflectionBinding $parent[UserControl].DataContext.CopyTextCommand}" 
+                                                  CommandParameter="{ReflectionBinding ReceivedTime}" />
                                         <MenuItem Header="Copy OneNote URL" 
                                                   Command="{ReflectionBinding $parent[UserControl].DataContext.CopyUrlCommand}" 
                                                   CommandParameter="{ReflectionBinding OneNoteUrl}" 
                                                   IsVisible="{ReflectionBinding OneNoteUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                        <MenuItem Header="Copy Error Message" 
+                                                  Command="{ReflectionBinding $parent[UserControl].DataContext.CopyTextCommand}" 
+                                                  CommandParameter="{ReflectionBinding LastError}" 
+                                                  IsVisible="{ReflectionBinding LastError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                                     </ContextMenu>
                                 </Setter>
                             </Style>

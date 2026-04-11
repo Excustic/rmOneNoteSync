@@ -112,7 +112,7 @@ This is the heaviest part of the codebase. Each service is an implementation of 
 |---|---|---|
 | `SshService` | `ISshService` | All communication with the tablet goes through here. Uses [SSH.NET](https://github.com/sshnet/SSH.NET) for connecting, executing shell commands, and transferring files via SFTP. Exposes an `OnConnectionChanged` event consumed by the UI. |
 | `SqliteDatabaseService` | `IDatabaseService` | Manages the local SQLite database (`sync.db`). Stores `SyncConfiguration`, `PageMetadata`, `DocumentMetadata`, sync history, and generic telemetry key-value pairs. Uses [Dapper](https://github.com/DapperLib/Dapper) as its micro-ORM. |
-| `SyncService` | `ISyncService` | The main orchestrator. When a sync is triggered (manually or on timer), it fetches all `Pending` pages from the database, converts each `.rm` file to InkML via `RmConverterService`, then creates/finds the correct Notebook → Section hierarchy on OneNote and uploads the page using `OneNoteClient`. Fires progress and completion events consumed by `SyncStatusViewModel`. |
+| `SyncService` | `ISyncService` | The main orchestrator. Triggered via a bounded `System.Threading.Channels` queue instead of overlapping timers, using an event-driven fire-and-forget architecture. It converts `.rm` files via `RmConverterService` (limited by `MaxThreads`), enforces a 5-thread `SemaphoreSlim` limit and exponential backoff jitter for Microsoft Graph API `HTTP 429` timeouts, and uploads the page. Fires granular progress events (`Queued`, `Transcoding`, etc.) consumed by `SyncStatusViewModel`. |
 | `SyncServerService` | `ISyncServerService` | Runs a local **HTTP server** (using `HttpListener`) on port 8080. This is the endpoint the tablet's `httpclient` daemon POSTs `.rm` files to. It validates API keys, checks the document whitelist, saves files to disk, records metadata in the database, and raises a `FileReceived` event that triggers `SyncService`. |
 | `SyncServerHostedService` | (IHostedService) | A thin wrapper that starts and stops `SyncServerService` as a .NET background hosted service, so the HTTP server runs for the lifetime of the application. |
 | `DeploymentService` | `IDeploymentService` | Handles the full lifecycle of installing, updating, and uninstalling the C daemon on the tablet. It downloads the correct pre-compiled binaries from GitHub Releases (matching the device model), uploads them via SSH, writes config files, installs systemd service units, and starts the services. |
@@ -172,6 +172,7 @@ This module provides a REST-like API on port 8000 for the desktop app to manage 
 - `GET /endpoints` / `POST /endpoints/add`: Manages the additive list of host URLs (`endpoints.conf`).
 - `GET /whitelist` / `PUT /whitelist`: Manages the sync document whitelist (`whitelist.dat`).
 - `GET /filetree`: Serves a JSON representation of the tablet's file structure (filters out items in the "trash").
+- `POST /sync`: Instantly wakes up the watcher queue to perform a manual sync on demand rather than waiting for the sleep cycle.
 - `GET /version`: Returns current daemon version.
 - Uses `flock()` to ensure atomic, thread-safe access to configuration files.
 

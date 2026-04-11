@@ -520,6 +520,30 @@ public partial class SyncStatusViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    private async Task CopyTextAsync(object? parameter)
+    {
+        var text = parameter?.ToString();
+        if (string.IsNullOrEmpty(text)) return;
+
+        try
+        {
+            var topLevel = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                ? desktop.MainWindow
+                : null;
+
+            var clipboard = topLevel?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(text);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to copy text");
+        }
+    }
+
     private (string notebook, string section, string page) ParseVirtualPath(string virtualPath)
     {
         var parts = virtualPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
