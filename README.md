@@ -5,8 +5,10 @@
 
   [![GitHub Release](https://img.shields.io/github/v/release/Excustic/rmOneNoteSync?style=flat-square)](https://github.com/Excustic/rmOneNoteSync/releases/latest)
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0)
-
-  *A lightweight, cross-platform desktop application and on-device daemon that seamlessly synchronizes your reMarkable notebooks directly to Microsoft OneNote.*
+  
+ [![wakatime](https://wakatime.com/badge/user/8e9a9690-1e6c-4138-935e-86ac8d75158f/project/121207d7-7d1e-43f7-b989-1349606a8fd1.svg)](https://wakatime.com/badge/user/8e9a9690-1e6c-4138-935e-86ac8d75158f/project/121207d7-7d1e-43f7-b989-1349606a8fd1)  (Since initial release)
+ 
+*A lightweight, cross-platform desktop application and on-device daemon that seamlessly synchronizes your reMarkable notebooks directly to Microsoft OneNote.*
 </div>
 
 https://github.com/user-attachments/assets/81273bca-e51a-4322-a46f-470b707c90f3
