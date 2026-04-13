@@ -66,8 +66,8 @@ The project strives to support a wide range of hardware and operating systems an
 
 | Desktop OS | App Version | reMarkable Device | rM OS Version | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| Windows 11 (x64) | v1.0.0-alpha.2 | reMarkable Paper Pro | v3.25.1.1 | ✅ Verified |
-| Arch Linux (KDE Plasma) | v1.0.0-alpha.2 | reMarkable Paper Pro | v3.25.1.1 | ✅ Verified |
+| Windows 11 (x64) | v1.0.0-alpha.3 | reMarkable Paper Pro | v3.26.0.68 | ✅ Verified |
+| Arch Linux (KDE Plasma) | v1.0.0-alpha.3 | reMarkable Paper Pro | v3.26.0.68 | ✅ Verified |
 | Ubuntu 24.04 | v1.0.0-alpha | reMarkable Paper Pro | N/A | ❓ Untested |
 | macOS 14 (Apple Silicon) | v1.0.0-alpha | reMarkable Paper Pro | N/A | ❓ Untested |
 | Windows 11 (x64) | v1.0.0-alpha | reMarkable 2 | N/A | ❓ Untested |
@@ -78,7 +78,7 @@ The project strives to support a wide range of hardware and operating systems an
 | Arch Linux (KDE Plasma) | v1.0.0-alpha | reMarkable 1 | N/A | ❓ Untested |
 | Ubuntu 24.04 | v1.0.0-alpha | reMarkable 1 | N/A | ❓ Untested |
 | macOS 14 (Apple Silicon) | v1.0.0-alpha | reMarkable 1 | N/A | ❓ Untested |
-| Windows 11 (x64) | v1.0.0-alpha.2 | reMarkable Move | v3.26.0.68 | ✅ Verified |
+| Windows 11 (x64) | v1.0.0-alpha.3 | reMarkable Move | v3.26.0.68 | ✅ Verified |
 | Arch Linux (KDE Plasma) | v1.0.0-alpha | reMarkable Move | N/A | ❓ Untested |
 | Ubuntu 24.04 | v1.0.0-alpha | reMarkable Move | N/A | ❓ Untested |
 | macOS 14 (Apple Silicon) | v1.0.0-alpha | reMarkable Move | N/A | ❓ Untested |
