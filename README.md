@@ -1,7 +1,6 @@
 <div align="center">
   <img src=".github/assets/app-icon.png" alt="rmOneNoteSync Logo" width="128"/>
-  
-  # reMarkable OneNote Sync 
+
 
   [![GitHub Release](https://img.shields.io/github/v/release/Excustic/rmOneNoteSync?style=flat-square)](https://github.com/Excustic/rmOneNoteSync/releases/latest)
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0)
@@ -10,6 +9,10 @@
  
 *A lightweight, cross-platform desktop application and on-device daemon that seamlessly synchronizes your reMarkable notebooks directly to Microsoft OneNote.*
 </div>
+
+> [!Note]
+> The project was archived due to inactivity and complexity of the architecture and overall approach. A succession of this project was made in the form of a web extension, see [rmOneNoteWebExtension](https://github.com/Excustic/rmOneNoteWebExtension) 
+# reMarkable OneNote Sync 
 
 https://github.com/user-attachments/assets/81273bca-e51a-4322-a46f-470b707c90f3
 
